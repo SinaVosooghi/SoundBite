@@ -1,0 +1,32 @@
+{
+  "name": "cdk",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "cdk:bootstrap": "cdk bootstrap",
+    "cdk:deploy": "cdk deploy --require-approval never",
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage",
+    "test:integration": "jest --testPathPattern=integration",
+    "test:security": "jest --testPathPattern=security",
+    "test:snapshots": "jest --testPathPattern=snapshots",
+    "test:all": "jest --passWithNoTests",
+    "cdk-nag": "cdk-nag",
+    "cdk-nag:fix": "cdk-nag --fix"
+  },
+  "main": "bin/infra.ts",
+  "license": "MIT",
+  "dependencies": {
+    "aws-cdk-lib": "^2.0.0",
+    "constructs": "^10.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.15",
+    "aws-cdk": "^2.1021.0",
+    "aws-cdk-local": "^3.0.1",
+    "cdk-nag": "^2.37.2",
+    "ts-node": "^10.0.0",
+    "typescript": "^5.0.0"
+  }
+}
