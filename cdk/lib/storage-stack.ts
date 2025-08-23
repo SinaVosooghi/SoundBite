@@ -6,6 +6,7 @@ import * as cloudwatch from 'aws-cdk-lib/aws-cloudwatch';
 export interface StorageStackProps extends cdk.StackProps {
   projectName: string;
   environment: string;
+  enableMultiEnvironment?: boolean;
 }
 
 export class StorageStack extends cdk.Stack {
@@ -14,14 +15,61 @@ export class StorageStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props: StorageStackProps) {
     super(scope, id, props);
 
-    // S3 Bucket with lifecycle rules for cost control
+    // S3 Bucket with lifecycle policies for cost optimization
+    // For multi-environment: use environment-specific folder prefixes
     this.bucket = new s3.Bucket(this, 'SoundbitesBucket', {
-      bucketName: `${props.projectName.toLowerCase()}-${props.environment}-soundbites-bucket-${this.account}`,
-      versioned: false,
+      bucketName: props.enableMultiEnvironment
+        ? `${props.projectName.toLowerCase()}-multienv-soundbites-${this.account}`
+        : `${props.projectName.toLowerCase()}-${props.environment}-soundbites-${this.account}`,
+      versioned: false, // Keep simple for Free Tier
       encryption: s3.BucketEncryption.S3_MANAGED,
       blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
       removalPolicy: cdk.RemovalPolicy.DESTROY, // For demo - use RETAIN in production
-      lifecycleRules: [
+      autoDeleteObjects: false, // Keep control over deletion
+      lifecycleRules: props.enableMultiEnvironment ? [
+        // Multi-environment lifecycle rules
+        {
+          id: 'DevelopmentRetention',
+          enabled: true,
+          prefix: 'development/',
+          expiration: cdk.Duration.days(60), // Must be > transition days (30)
+          transitions: [
+            {
+              storageClass: s3.StorageClass.INFREQUENT_ACCESS,
+              transitionAfter: cdk.Duration.days(30), // AWS requires >= 30 days
+            }
+          ],
+        },
+        {
+          id: 'StagingRetention',
+          enabled: true,
+          prefix: 'staging/',
+          expiration: cdk.Duration.days(90), // Must be > transition days (30)
+          transitions: [
+            {
+              storageClass: s3.StorageClass.INFREQUENT_ACCESS,
+              transitionAfter: cdk.Duration.days(30), // AWS requires >= 30 days
+            }
+          ],
+        },
+        {
+          id: 'ProductionRetention',
+          enabled: true,
+          prefix: 'production/',
+          expiration: cdk.Duration.days(180), // Must be > transition days (90)
+          transitions: [
+            {
+              storageClass: s3.StorageClass.INFREQUENT_ACCESS,
+              transitionAfter: cdk.Duration.days(30), // AWS requires >= 30 days
+            },
+            {
+              storageClass: s3.StorageClass.GLACIER,
+              transitionAfter: cdk.Duration.days(90), // AWS requires >= 90 days
+            }
+          ],
+        }
+      ] : [
+        // Single environment lifecycle rules (keep existing)
         {
           id: 'DeleteOldSoundbites',
           enabled: true,
@@ -40,7 +88,7 @@ export class StorageStack extends cdk.Stack {
       ],
     });
 
-    // CloudWatch Alarms for monitoring
+    // CloudWatch Alarms for monitoring (keep same for Free Tier)
     const bucketSizeAlarm = new cloudwatch.Alarm(this, 'BucketSizeAlarm', {
       metric: new cloudwatch.Metric({
         namespace: 'AWS/S3',
@@ -77,17 +125,24 @@ export class StorageStack extends cdk.Stack {
     new cdk.CfnOutput(this, 'BucketName', {
       value: this.bucket.bucketName,
       description: 'S3 Bucket Name',
-      exportName: `${props.projectName}-${props.environment}-BucketName`,
+      exportName: props.enableMultiEnvironment
+        ? `${props.projectName}-MultiEnv-BucketName`
+        : `${props.projectName}-${props.environment}-BucketName`,
     });
 
     new cdk.CfnOutput(this, 'BucketArn', {
       value: this.bucket.bucketArn,
       description: 'S3 Bucket ARN',
-      exportName: `${props.projectName}-${props.environment}-BucketArn`,
+      exportName: props.enableMultiEnvironment
+        ? `${props.projectName}-MultiEnv-BucketArn`
+        : `${props.projectName}-${props.environment}-BucketArn`,
     });
 
     // Add stack tags
     cdk.Tags.of(this).add('Service', 'Storage');
     cdk.Tags.of(this).add('Component', 'S3');
+    if (props.enableMultiEnvironment) {
+      cdk.Tags.of(this).add('MultiEnvironment', 'true');
+    }
   }
 } 

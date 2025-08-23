@@ -2,10 +2,12 @@ import * as cdk from 'aws-cdk-lib';
 import { Construct } from 'constructs';
 import * as sqs from 'aws-cdk-lib/aws-sqs';
 import * as cloudwatch from 'aws-cdk-lib/aws-cloudwatch';
+import { EnvironmentConfig, getEnvironmentConfig, getAllEnvironments } from '../config';
 
 export interface QueueStackProps extends cdk.StackProps {
   projectName: string;
   environment: string;
+  enableMultiEnvironment?: boolean;
 }
 
 export class QueueStack extends cdk.Stack {
@@ -17,14 +19,19 @@ export class QueueStack extends cdk.Stack {
 
     // Dead Letter Queue
     this.dlq = new sqs.Queue(this, 'SoundbiteDLQ', {
-      queueName: `${props.projectName}-${props.environment}-SoundbiteDLQ`,
+      queueName: props.enableMultiEnvironment
+        ? `${props.projectName}-MultiEnv-SoundbiteDLQ`
+        : `${props.projectName}-${props.environment}-SoundbiteDLQ`,
       retentionPeriod: cdk.Duration.days(14),
       visibilityTimeout: cdk.Duration.seconds(130),
     });
 
     // Main Queue with Dead Letter Queue
+    // For multi-environment: use single queue with environment message attributes
     this.queue = new sqs.Queue(this, 'SoundbiteQueue', {
-      queueName: `${props.projectName}-${props.environment}-SoundbiteQueue`,
+      queueName: props.enableMultiEnvironment
+        ? `${props.projectName}-MultiEnv-SoundbiteQueue`
+        : `${props.projectName}-${props.environment}-SoundbiteQueue`,
       visibilityTimeout: cdk.Duration.seconds(130),
       deadLetterQueue: {
         queue: this.dlq,
@@ -33,7 +40,7 @@ export class QueueStack extends cdk.Stack {
       receiveMessageWaitTime: cdk.Duration.seconds(20), // Long polling
     });
 
-    // CloudWatch Alarms for monitoring
+    // CloudWatch Alarms for monitoring (keep same for Free Tier)
     const queueDepthAlarm = new cloudwatch.Alarm(this, 'QueueDepthAlarm', {
       metric: new cloudwatch.Metric({
         namespace: 'AWS/SQS',
@@ -75,23 +82,32 @@ export class QueueStack extends cdk.Stack {
     new cdk.CfnOutput(this, 'QueueUrl', {
       value: this.queue.queueUrl,
       description: 'SQS Queue URL',
-      exportName: `${props.projectName}-${props.environment}-QueueUrl`,
+      exportName: props.enableMultiEnvironment
+        ? `${props.projectName}-MultiEnv-QueueUrl`
+        : `${props.projectName}-${props.environment}-QueueUrl`,
     });
 
     new cdk.CfnOutput(this, 'QueueArn', {
       value: this.queue.queueArn,
       description: 'SQS Queue ARN',
-      exportName: `${props.projectName}-${props.environment}-QueueArn`,
+      exportName: props.enableMultiEnvironment
+        ? `${props.projectName}-MultiEnv-QueueArn`
+        : `${props.projectName}-${props.environment}-QueueArn`,
     });
 
     new cdk.CfnOutput(this, 'DLQUrl', {
       value: this.dlq.queueUrl,
       description: 'SQS Dead Letter Queue URL',
-      exportName: `${props.projectName}-${props.environment}-DLQUrl`,
+      exportName: props.enableMultiEnvironment
+        ? `${props.projectName}-MultiEnv-DLQUrl`
+        : `${props.projectName}-${props.environment}-DLQUrl`,
     });
 
     // Add stack tags
     cdk.Tags.of(this).add('Service', 'Queue');
     cdk.Tags.of(this).add('Component', 'SQS');
+    if (props.enableMultiEnvironment) {
+      cdk.Tags.of(this).add('MultiEnvironment', 'true');
+    }
   }
 } 

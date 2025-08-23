@@ -1,0 +1,116 @@
+import { developmentLocalStackConfig } from './environments/development-localstack.config';
+import { developmentAWSConfig } from './environments/development-aws.config';
+import { stagingConfig } from './environments/staging.config';
+import { productionConfig } from './environments/production.config';
+
+export interface EnvironmentConfig {
+  name: string;
+  port: number;
+  aws: {
+    endpoint?: string;
+    region: string;
+    credentials?: {
+      accessKeyId?: string;
+      secretAccessKey?: string;
+    };
+  };
+  services: {
+    dynamodb: {
+      tableName: string;
+      endpoint?: string;
+    };
+    s3: {
+      bucketName: string;
+      endpoint?: string;
+    };
+    sqs: {
+      queueUrl: string;
+      endpoint?: string;
+    };
+  };
+}
+
+export class EnvironmentLoader {
+  private static instance: EnvironmentLoader;
+  private currentConfig: EnvironmentConfig;
+
+  private constructor() {
+    this.currentConfig = this.detectEnvironment();
+  }
+
+  public static getInstance(): EnvironmentLoader {
+    if (!EnvironmentLoader.instance) {
+      EnvironmentLoader.instance = new EnvironmentLoader();
+    }
+    return EnvironmentLoader.instance;
+  }
+
+  public getConfig(): EnvironmentConfig {
+    return this.currentConfig;
+  }
+
+  public getEnvironmentName(): string {
+    return this.currentConfig.name;
+  }
+
+  public isDevelopment(): boolean {
+    return this.currentConfig.name.startsWith('development');
+  }
+
+  public isStaging(): boolean {
+    return this.currentConfig.name === 'staging';
+  }
+
+  public isProduction(): boolean {
+    return this.currentConfig.name === 'production';
+  }
+
+  public isLocalStack(): boolean {
+    return this.currentConfig.name === 'development-localstack';
+  }
+
+  public isRealAWS(): boolean {
+    return this.currentConfig.name === 'development-aws' || 
+           this.currentConfig.name === 'staging' || 
+           this.currentConfig.name === 'production';
+  }
+
+  private detectEnvironment(): EnvironmentConfig {
+    const nodeEnv = process.env.NODE_ENV || 'development';
+    const awsConnectionMode = process.env.AWS_CONNECTION_MODE || 'localstack';
+
+    // Check if running in Docker (EC2)
+    if (process.env.ENVIRONMENT) {
+      switch (process.env.ENVIRONMENT) {
+        case 'staging':
+          return stagingConfig;
+        case 'production':
+          return productionConfig;
+        default:
+          return stagingConfig; // fallback
+      }
+    }
+
+    // Check if running locally
+    if (nodeEnv === 'development') {
+      if (awsConnectionMode === 'aws') {
+        return developmentAWSConfig;
+      } else {
+        return developmentLocalStackConfig;
+      }
+    }
+
+    // Default fallback
+    return developmentLocalStackConfig;
+  }
+}
+
+// Export singleton instance
+export const environmentLoader = EnvironmentLoader.getInstance();
+export const getEnvironmentConfig = () => environmentLoader.getConfig();
+export const getEnvironmentName = () => environmentLoader.getEnvironmentName();
+export const isDevelopment = () => environmentLoader.isDevelopment();
+export const isStaging = () => environmentLoader.isStaging();
+export const isProduction = () => environmentLoader.isProduction();
+export const isLocalStack = () => environmentLoader.isLocalStack();
+export const isRealAWS = () => environmentLoader.isRealAWS();

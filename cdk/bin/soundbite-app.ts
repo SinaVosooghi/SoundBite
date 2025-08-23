@@ -5,6 +5,7 @@ import { StorageStack } from '../lib/storage-stack';
 import { QueueStack } from '../lib/queue-stack';
 import { ComputeStack } from '../lib/compute-stack';
 import { ApiStack } from '../lib/api-stack';
+import { getEnvironmentConfig, getAllEnvironments } from '../config';
 
 const app = new cdk.App();
 
@@ -14,40 +15,56 @@ const env = {
   region: process.env.CDK_DEFAULT_REGION || 'us-east-1',
 };
 
+// Get target environment from command line or environment variable
+const targetEnv = process.env.CDK_ENVIRONMENT || process.argv[2] || 'development';
+const validEnvironments = getAllEnvironments();
+
+if (!validEnvironments.includes(targetEnv)) {
+  console.error(`Invalid environment: ${targetEnv}`);
+  console.error(`Valid environments: ${validEnvironments.join(', ')}`);
+  process.exit(1);
+}
+
+const environmentConfig = getEnvironmentConfig(targetEnv);
+
 // Stack configuration
 const stackConfig = {
   projectName: 'SoundBite',
-  environment: 'production',
+  environment: targetEnv,
+  environmentConfig,
   ...env,
 };
 
+console.log(`Deploying ${stackConfig.projectName} to ${targetEnv} environment`);
+console.log(`Environment config:`, environmentConfig);
+
 // Individual service stacks for better observability and debugging
-const databaseStack = new DatabaseStack(app, `${stackConfig.projectName}-Database`, {
+const databaseStack = new DatabaseStack(app, `${stackConfig.projectName}-${environmentConfig.prefix}-Database`, {
   ...stackConfig,
-  description: 'SoundBite Database Stack (DynamoDB)',
+  description: `SoundBite Database Stack (DynamoDB) - ${targetEnv}`,
 });
 
-const storageStack = new StorageStack(app, `${stackConfig.projectName}-Storage`, {
+const storageStack = new StorageStack(app, `${stackConfig.projectName}-${environmentConfig.prefix}-Storage`, {
   ...stackConfig,
-  description: 'SoundBite Storage Stack (S3)',
+  description: `SoundBite Storage Stack (S3) - ${targetEnv}`,
 });
 
-const queueStack = new QueueStack(app, `${stackConfig.projectName}-Queue`, {
+const queueStack = new QueueStack(app, `${stackConfig.projectName}-${environmentConfig.prefix}-Queue`, {
   ...stackConfig,
-  description: 'SoundBite Queue Stack (SQS)',
+  description: `SoundBite Queue Stack (SQS) - ${targetEnv}`,
 });
 
-const computeStack = new ComputeStack(app, `${stackConfig.projectName}-Compute`, {
+const computeStack = new ComputeStack(app, `${stackConfig.projectName}-${environmentConfig.prefix}-Compute`, {
   ...stackConfig,
-  description: 'SoundBite Compute Stack (Lambda + ECR)',
+  description: `SoundBite Compute Stack (Lambda + ECR) - ${targetEnv}`,
   databaseTable: databaseStack.table,
   storageBucket: storageStack.bucket,
   messageQueue: queueStack.queue,
 });
 
-const apiStack = new ApiStack(app, `${stackConfig.projectName}-API`, {
+const apiStack = new ApiStack(app, `${stackConfig.projectName}-${environmentConfig.prefix}-API`, {
   ...stackConfig,
-  description: 'SoundBite API Stack (EC2 + API Gateway)',
+  description: `SoundBite API Stack (EC2 + API Gateway) - ${targetEnv}`,
   databaseTable: databaseStack.table,
   storageBucket: storageStack.bucket,
   messageQueue: queueStack.queue,
@@ -63,13 +80,15 @@ computeStack.addDependency(queueStack);
 // Add tags for better resource management
 const tags = {
   Project: stackConfig.projectName,
-  Environment: stackConfig.environment,
+  Environment: targetEnv,
+  EnvironmentPrefix: environmentConfig.prefix,
   ManagedBy: 'CDK',
 };
 
 [databaseStack, storageStack, queueStack, computeStack, apiStack].forEach(stack => {
   cdk.Tags.of(stack).add('Project', tags.Project);
   cdk.Tags.of(stack).add('Environment', tags.Environment);
+  cdk.Tags.of(stack).add('EnvironmentPrefix', tags.EnvironmentPrefix);
   cdk.Tags.of(stack).add('ManagedBy', tags.ManagedBy);
 });
 
