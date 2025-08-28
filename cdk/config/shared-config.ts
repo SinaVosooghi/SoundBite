@@ -42,7 +42,7 @@ export interface PerformanceConfig {
 export const sharedConfig: SharedConfig = {
   projectName: 'SoundBite',
   awsRegion: 'us-east-1',
-  
+
   costOptimization: {
     useFreeTier: true,
     enableAutoScaling: false, // Keep within Free Tier limits
@@ -50,7 +50,7 @@ export const sharedConfig: SharedConfig = {
     enableTTL: true,
     maxRetentionDays: 90,
   },
-  
+
   monitoring: {
     enableCloudWatch: true,
     enableLogging: true,
@@ -58,7 +58,7 @@ export const sharedConfig: SharedConfig = {
     enableAlarms: true,
     logRetentionDays: 7, // Free Tier limit
   },
-  
+
   security: {
     enableEncryption: true,
     enableIAM: true,
@@ -66,7 +66,7 @@ export const sharedConfig: SharedConfig = {
     enableWAF: false, // Keep simple for Free Tier
     enableBackup: false, // Keep simple for Free Tier
   },
-  
+
   performance: {
     enableCaching: false, // Keep simple for Free Tier
     enableCDN: false, // Keep simple for Free Tier

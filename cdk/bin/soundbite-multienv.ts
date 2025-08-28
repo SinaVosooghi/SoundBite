@@ -22,38 +22,58 @@ const stackConfig = {
   ...env,
 };
 
-console.log(`Deploying ${stackConfig.projectName} Multi-Environment Shared Resources`);
-console.log(`This will create shared resources for staging and production environments`);
+console.log(
+  `Deploying ${stackConfig.projectName} Multi-Environment Shared Resources`,
+);
+console.log(
+  `This will create shared resources for staging and production environments`,
+);
 
 // Shared Database Stack (single DynamoDB table with environment prefixes)
-const databaseStack = new DatabaseStack(app, `${stackConfig.projectName}-Shared-Database`, {
-  ...stackConfig,
-  enableMultiEnvironment: true,
-  description: `SoundBite Shared Database Stack (DynamoDB) - Multi-Environment`,
-});
+const databaseStack = new DatabaseStack(
+  app,
+  `${stackConfig.projectName}-Shared-Database`,
+  {
+    ...stackConfig,
+    enableMultiEnvironment: true,
+    description: `SoundBite Shared Database Stack (DynamoDB) - Multi-Environment`,
+  },
+);
 
 // Shared Storage Stack (single S3 bucket with environment folders)
-const storageStack = new StorageStack(app, `${stackConfig.projectName}-Shared-Storage`, {
-  ...stackConfig,
-  enableMultiEnvironment: true,
-  description: `SoundBite Shared Storage Stack (S3) - Multi-Environment`,
-});
+const storageStack = new StorageStack(
+  app,
+  `${stackConfig.projectName}-Shared-Storage`,
+  {
+    ...stackConfig,
+    enableMultiEnvironment: true,
+    description: `SoundBite Shared Storage Stack (S3) - Multi-Environment`,
+  },
+);
 
 // Shared Queue Stack (single SQS queue with environment attributes)
-const queueStack = new QueueStack(app, `${stackConfig.projectName}-Shared-Queue`, {
-  ...stackConfig,
-  enableMultiEnvironment: true,
-  description: `SoundBite Shared Queue Stack (SQS) - Multi-Environment`,
-});
+const queueStack = new QueueStack(
+  app,
+  `${stackConfig.projectName}-Shared-Queue`,
+  {
+    ...stackConfig,
+    enableMultiEnvironment: true,
+    description: `SoundBite Shared Queue Stack (SQS) - Multi-Environment`,
+  },
+);
 
 // Shared Compute Stack (single Lambda function + ECR repository)
-const computeStack = new ComputeStack(app, `${stackConfig.projectName}-Shared-Compute`, {
-  ...stackConfig,
-  description: `SoundBite Shared Compute Stack (Lambda + ECR) - Multi-Environment`,
-  databaseTable: databaseStack.table,
-  storageBucket: storageStack.bucket,
-  messageQueue: queueStack.queue,
-});
+const computeStack = new ComputeStack(
+  app,
+  `${stackConfig.projectName}-Shared-Compute`,
+  {
+    ...stackConfig,
+    description: `SoundBite Shared Compute Stack (Lambda + ECR) - Multi-Environment`,
+    databaseTable: databaseStack.table,
+    storageBucket: storageStack.bucket,
+    messageQueue: queueStack.queue,
+  },
+);
 
 // Shared API Stack (single EC2 instance running staging + production containers)
 const apiStack = new ApiStack(app, `${stackConfig.projectName}-Shared-API`, {
@@ -81,12 +101,14 @@ const tags = {
   MultiEnvironment: 'true',
 };
 
-[databaseStack, storageStack, queueStack, computeStack, apiStack].forEach(stack => {
-  cdk.Tags.of(stack).add('Project', tags.Project);
-  cdk.Tags.of(stack).add('Environment', tags.Environment);
-  cdk.Tags.of(stack).add('EnvironmentType', tags.EnvironmentType);
-  cdk.Tags.of(stack).add('ManagedBy', tags.ManagedBy);
-  cdk.Tags.of(stack).add('MultiEnvironment', tags.MultiEnvironment);
-});
+[databaseStack, storageStack, queueStack, computeStack, apiStack].forEach(
+  (stack) => {
+    cdk.Tags.of(stack).add('Project', tags.Project);
+    cdk.Tags.of(stack).add('Environment', tags.Environment);
+    cdk.Tags.of(stack).add('EnvironmentType', tags.EnvironmentType);
+    cdk.Tags.of(stack).add('ManagedBy', tags.ManagedBy);
+    cdk.Tags.of(stack).add('MultiEnvironment', tags.MultiEnvironment);
+  },
+);
 
 app.synth();

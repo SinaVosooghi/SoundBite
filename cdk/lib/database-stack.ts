@@ -2,7 +2,6 @@ import * as cdk from 'aws-cdk-lib';
 import { Construct } from 'constructs';
 import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
 import * as cloudwatch from 'aws-cdk-lib/aws-cloudwatch';
-import { EnvironmentConfig, getEnvironmentConfig, getAllEnvironments } from '../config';
 
 export interface DatabaseStackProps extends cdk.StackProps {
   projectName: string;
@@ -12,6 +11,10 @@ export interface DatabaseStackProps extends cdk.StackProps {
 
 export class DatabaseStack extends cdk.Stack {
   public readonly table: dynamodb.Table;
+  private readThrottleAlarm: cloudwatch.Alarm;
+  private writeThrottleAlarm: cloudwatch.Alarm;
+  private consumedReadCapacityAlarm: cloudwatch.Alarm;
+  private consumedWriteCapacityAlarm: cloudwatch.Alarm;
 
   constructor(scope: Construct, id: string, props: DatabaseStackProps) {
     super(scope, id, props);
@@ -19,11 +22,11 @@ export class DatabaseStack extends cdk.Stack {
     // DynamoDB Table with TTL for automatic cleanup
     // For multi-environment: use environment prefixes in partition key
     this.table = new dynamodb.Table(this, 'SoundbitesTable', {
-      tableName: props.enableMultiEnvironment 
+      tableName: props.enableMultiEnvironment
         ? `${props.projectName}-MultiEnv-SoundbitesTable`
         : `${props.projectName}-${props.environment}-SoundbitesTable`,
       partitionKey: { name: 'pk', type: dynamodb.AttributeType.STRING }, // env#id for multi-env
-      sortKey: { name: 'sk', type: dynamodb.AttributeType.STRING },      // timestamp for multi-env
+      sortKey: { name: 'sk', type: dynamodb.AttributeType.STRING }, // timestamp for multi-env
       billingMode: dynamodb.BillingMode.PAY_PER_REQUEST, // Keep Free Tier friendly
       removalPolicy: cdk.RemovalPolicy.DESTROY, // For demo - use RETAIN in production
       timeToLiveAttribute: 'ttl', // Enable TTL for automatic cleanup
@@ -34,7 +37,10 @@ export class DatabaseStack extends cdk.Stack {
     if (props.enableMultiEnvironment) {
       this.table.addGlobalSecondaryIndex({
         indexName: 'EnvironmentIndex',
-        partitionKey: { name: 'environment', type: dynamodb.AttributeType.STRING },
+        partitionKey: {
+          name: 'environment',
+          type: dynamodb.AttributeType.STRING,
+        },
         sortKey: { name: 'createdAt', type: dynamodb.AttributeType.STRING },
         projectionType: dynamodb.ProjectionType.ALL,
       });
@@ -44,14 +50,14 @@ export class DatabaseStack extends cdk.Stack {
     this.table.addGlobalSecondaryIndex({
       indexName: 'UserIdIndex',
       partitionKey: { name: 'userId', type: dynamodb.AttributeType.STRING },
-      sortKey: props.enableMultiEnvironment 
+      sortKey: props.enableMultiEnvironment
         ? { name: 'environment', type: dynamodb.AttributeType.STRING }
         : { name: 'createdAt', type: dynamodb.AttributeType.STRING },
       projectionType: dynamodb.ProjectionType.ALL,
     });
 
     // CloudWatch Alarms for monitoring (keep same for Free Tier)
-    const readThrottleAlarm = new cloudwatch.Alarm(this, 'ReadThrottleAlarm', {
+    this.readThrottleAlarm = new cloudwatch.Alarm(this, 'ReadThrottleAlarm', {
       metric: new cloudwatch.Metric({
         namespace: 'AWS/DynamoDB',
         metricName: 'ReadThrottleEvents',
@@ -66,7 +72,7 @@ export class DatabaseStack extends cdk.Stack {
       alarmDescription: 'DynamoDB read throttle events',
     });
 
-    const writeThrottleAlarm = new cloudwatch.Alarm(this, 'WriteThrottleAlarm', {
+    this.writeThrottleAlarm = new cloudwatch.Alarm(this, 'WriteThrottleAlarm', {
       metric: new cloudwatch.Metric({
         namespace: 'AWS/DynamoDB',
         metricName: 'WriteThrottleEvents',
@@ -81,19 +87,27 @@ export class DatabaseStack extends cdk.Stack {
       alarmDescription: 'DynamoDB write throttle events',
     });
 
-    const consumedReadCapacityAlarm = new cloudwatch.Alarm(this, 'ConsumedReadCapacityAlarm', {
-      metric: this.table.metricConsumedReadCapacityUnits(),
-      threshold: 1000,
-      evaluationPeriods: 2,
-      alarmDescription: 'High DynamoDB read capacity consumption',
-    });
+    this.consumedReadCapacityAlarm = new cloudwatch.Alarm(
+      this,
+      'ConsumedReadCapacityAlarm',
+      {
+        metric: this.table.metricConsumedReadCapacityUnits(),
+        threshold: 1000,
+        evaluationPeriods: 2,
+        alarmDescription: 'High DynamoDB read capacity consumption',
+      },
+    );
 
-    const consumedWriteCapacityAlarm = new cloudwatch.Alarm(this, 'ConsumedWriteCapacityAlarm', {
-      metric: this.table.metricConsumedWriteCapacityUnits(),
-      threshold: 1000,
-      evaluationPeriods: 2,
-      alarmDescription: 'High DynamoDB write capacity consumption',
-    });
+    this.consumedWriteCapacityAlarm = new cloudwatch.Alarm(
+      this,
+      'ConsumedWriteCapacityAlarm',
+      {
+        metric: this.table.metricConsumedWriteCapacityUnits(),
+        threshold: 1000,
+        evaluationPeriods: 2,
+        alarmDescription: 'High DynamoDB write capacity consumption',
+      },
+    );
 
     // Outputs
     new cdk.CfnOutput(this, 'TableName', {
@@ -119,4 +133,4 @@ export class DatabaseStack extends cdk.Stack {
       cdk.Tags.of(this).add('MultiEnvironment', 'true');
     }
   }
-} 
+}

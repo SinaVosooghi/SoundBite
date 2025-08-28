@@ -9,4 +9,12 @@ export * from './environment-loader';
 
 // Default exports
 export { environmentLoader as default } from './environment-loader';
-export { getEnvironmentConfig, getEnvironmentName, isDevelopment, isStaging, isProduction, isLocalStack, isRealAWS } from './environment-loader';
+export {
+  getEnvironmentConfig,
+  getEnvironmentName,
+  isDevelopment,
+  isStaging,
+  isProduction,
+  isLocalStack,
+  isRealAWS,
+} from './environment-loader';

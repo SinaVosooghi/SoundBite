@@ -11,6 +11,11 @@ export default tseslint.config(
       'dist',
       '.pnp.cjs',
       '.pnp.loader.mjs',
+      '**/cdk.out/**',
+      '**/coverage/**',
+      '**/node_modules/**',
+      '**/*.js',
+      '**/*.mjs'
     ],
   },
   eslint.configs.recommended,

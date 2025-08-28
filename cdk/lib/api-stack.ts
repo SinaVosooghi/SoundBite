@@ -20,6 +20,9 @@ export interface ApiStackProps extends cdk.StackProps {
 
 export class ApiStack extends cdk.Stack {
   public readonly apiInstance: ec2.Instance;
+  private cpuUtilizationAlarm: cloudwatch.Alarm;
+  private memoryUtilizationAlarm: cloudwatch.Alarm;
+  private networkInAlarm: cloudwatch.Alarm;
 
   constructor(scope: Construct, id: string, props: ApiStackProps) {
     super(scope, id, props);
@@ -48,27 +51,55 @@ export class ApiStack extends cdk.Stack {
       allowAllOutbound: true,
     });
     apiSg.addIngressRule(ec2.Peer.anyIpv4(), ec2.Port.tcp(22), 'Allow SSH');
-    apiSg.addIngressRule(ec2.Peer.anyIpv4(), ec2.Port.tcp(80), 'Allow HTTP (Nginx)');
-    
+    apiSg.addIngressRule(
+      ec2.Peer.anyIpv4(),
+      ec2.Port.tcp(80),
+      'Allow HTTP (Nginx)',
+    );
+
     // Multi-environment ports
     if (props.enableMultiEnvironment) {
-      apiSg.addIngressRule(ec2.Peer.anyIpv4(), ec2.Port.tcp(3001), 'Allow Development Environment');
-      apiSg.addIngressRule(ec2.Peer.anyIpv4(), ec2.Port.tcp(3002), 'Allow Staging Environment');
-      apiSg.addIngressRule(ec2.Peer.anyIpv4(), ec2.Port.tcp(3003), 'Allow Production Environment');
+      apiSg.addIngressRule(
+        ec2.Peer.anyIpv4(),
+        ec2.Port.tcp(3001),
+        'Allow Development Environment',
+      );
+      apiSg.addIngressRule(
+        ec2.Peer.anyIpv4(),
+        ec2.Port.tcp(3002),
+        'Allow Staging Environment',
+      );
+      apiSg.addIngressRule(
+        ec2.Peer.anyIpv4(),
+        ec2.Port.tcp(3003),
+        'Allow Production Environment',
+      );
     } else {
-      apiSg.addIngressRule(ec2.Peer.anyIpv4(), ec2.Port.tcp(3000), 'Allow Single Environment');
+      apiSg.addIngressRule(
+        ec2.Peer.anyIpv4(),
+        ec2.Port.tcp(3000),
+        'Allow Single Environment',
+      );
     }
 
     // IAM Role for EC2 (allow ECR, SQS send, S3 read, DynamoDB read, CloudWatch logs, SSM)
     const ec2Role = new iam.Role(this, 'ApiEc2Role', {
       assumedBy: new iam.ServicePrincipal('ec2.amazonaws.com'),
       managedPolicies: [
-        iam.ManagedPolicy.fromAwsManagedPolicyName('AmazonEC2ContainerRegistryReadOnly'),
+        iam.ManagedPolicy.fromAwsManagedPolicyName(
+          'AmazonEC2ContainerRegistryReadOnly',
+        ),
         iam.ManagedPolicy.fromAwsManagedPolicyName('AmazonSQSFullAccess'),
         iam.ManagedPolicy.fromAwsManagedPolicyName('AmazonS3ReadOnlyAccess'),
-        iam.ManagedPolicy.fromAwsManagedPolicyName('AmazonDynamoDBReadOnlyAccess'),
-        iam.ManagedPolicy.fromAwsManagedPolicyName('CloudWatchAgentServerPolicy'),
-        iam.ManagedPolicy.fromAwsManagedPolicyName('AmazonSSMManagedInstanceCore'),
+        iam.ManagedPolicy.fromAwsManagedPolicyName(
+          'AmazonDynamoDBReadOnlyAccess',
+        ),
+        iam.ManagedPolicy.fromAwsManagedPolicyName(
+          'CloudWatchAgentServerPolicy',
+        ),
+        iam.ManagedPolicy.fromAwsManagedPolicyName(
+          'AmazonSSMManagedInstanceCore',
+        ),
       ],
     });
 
@@ -79,7 +110,7 @@ export class ApiStack extends cdk.Stack {
 
     // User data script for EC2 with Docker and multi-environment setup
     const userData = ec2.UserData.forLinux();
-    
+
     if (props.enableMultiEnvironment) {
       // Multi-environment setup - Updated: 2025-08-14
       userData.addCommands(
@@ -204,50 +235,52 @@ export class ApiStack extends cdk.Stack {
       userDataCausesReplacement: true,
     });
 
-    // CloudWatch Alarms for EC2 monitoring
-    const cpuUtilizationAlarm = new cloudwatch.Alarm(this, 'CpuUtilizationAlarm', {
-      metric: new cloudwatch.Metric({
-        namespace: 'AWS/EC2',
-        metricName: 'CPUUtilization',
-        dimensionsMap: {
-          InstanceId: this.apiInstance.instanceId,
-        },
-        statistic: 'Average',
-        period: cdk.Duration.minutes(5),
-      }),
-      threshold: 80,
-      evaluationPeriods: 2,
-      alarmDescription: 'EC2 CPU utilization exceeded 80%',
-    });
+    // Create CloudWatch alarms for monitoring
+    this.cpuUtilizationAlarm = new cloudwatch.Alarm(
+      this,
+      'CpuUtilizationAlarm',
+      {
+        metric: new cloudwatch.Metric({
+          namespace: 'AWS/EC2',
+          metricName: 'CPUUtilization',
+          dimensionsMap: { InstanceId: this.apiInstance.instanceId },
+          statistic: 'Average',
+          period: cdk.Duration.minutes(5),
+        }),
+        threshold: 80,
+        evaluationPeriods: 2,
+        alarmDescription: 'CPU utilization exceeded threshold',
+      },
+    );
 
-    const memoryUtilizationAlarm = new cloudwatch.Alarm(this, 'MemoryUtilizationAlarm', {
-      metric: new cloudwatch.Metric({
-        namespace: 'AWS/EC2',
-        metricName: 'MemoryUtilization',
-        dimensionsMap: {
-          InstanceId: this.apiInstance.instanceId,
-        },
-        statistic: 'Average',
-        period: cdk.Duration.minutes(5),
-      }),
-      threshold: 80,
-      evaluationPeriods: 2,
-      alarmDescription: 'EC2 memory utilization exceeded 80%',
-    });
+    this.memoryUtilizationAlarm = new cloudwatch.Alarm(
+      this,
+      'MemoryUtilizationAlarm',
+      {
+        metric: new cloudwatch.Metric({
+          namespace: 'AWS/EC2',
+          metricName: 'MemoryUtilization',
+          dimensionsMap: { InstanceId: this.apiInstance.instanceId },
+          statistic: 'Average',
+          period: cdk.Duration.minutes(5),
+        }),
+        threshold: 80,
+        evaluationPeriods: 2,
+        alarmDescription: 'Memory utilization exceeded threshold',
+      },
+    );
 
-    const networkInAlarm = new cloudwatch.Alarm(this, 'NetworkInAlarm', {
+    this.networkInAlarm = new cloudwatch.Alarm(this, 'NetworkInAlarm', {
       metric: new cloudwatch.Metric({
         namespace: 'AWS/EC2',
         metricName: 'NetworkIn',
-        dimensionsMap: {
-          InstanceId: this.apiInstance.instanceId,
-        },
-        statistic: 'Average',
+        dimensionsMap: { InstanceId: this.apiInstance.instanceId },
+        statistic: 'Sum',
         period: cdk.Duration.minutes(5),
       }),
-      threshold: 1000000, // 1MB
+      threshold: 1000000, // 1 MB
       evaluationPeriods: 2,
-      alarmDescription: 'EC2 network in exceeded 1MB',
+      alarmDescription: 'Network input exceeded threshold',
     });
 
     // Outputs
@@ -279,4 +312,4 @@ export class ApiStack extends cdk.Stack {
       cdk.Tags.of(this).add('MultiEnvironment', 'true');
     }
   }
-} 
+}

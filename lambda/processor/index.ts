@@ -1,8 +1,17 @@
 import { SQSHandler } from 'aws-lambda';
-import { PollyClient, SynthesizeSpeechCommand } from '@aws-sdk/client-polly';
+import {
+  PollyClient,
+  SynthesizeSpeechCommand,
+  VoiceId,
+} from '@aws-sdk/client-polly';
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
-import { DynamoDBClient, PutItemCommand } from '@aws-sdk/client-dynamodb';
+import {
+  DynamoDBClient,
+  PutItemCommand,
+  PutItemInput,
+} from '@aws-sdk/client-dynamodb';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
+import { Readable } from 'stream';
 
 const localOptions = {
   endpoint: 'http://localhost:4566',
@@ -20,10 +29,7 @@ const BUCKET_NAME = process.env.BUCKET_NAME!;
 const TABLE_NAME = process.env.TABLE_NAME!;
 
 // Mock Polly service for local development
-function mockPollySynthesize(
-  text: string,
-  voiceId: string,
-): Promise<Buffer> {
+function mockPollySynthesize(text: string, voiceId: string): Promise<Buffer> {
   console.log(
     `[MOCK] Synthesizing speech for text: "${text}" with voice: ${voiceId}`,
   );
@@ -38,14 +44,14 @@ function mockPollySynthesize(
 
 export const handler: SQSHandler = async (event) => {
   console.log(`Processing ${event.Records.length} SQS message(s)`);
-  
+
   for (const record of event.Records) {
     const startTime = Date.now();
     const messageId = record.messageId;
-    
+
     try {
       console.log(`Processing message: ${messageId}`);
-      
+
       const body = JSON.parse(record.body) as {
         id: string;
         text: string;
@@ -53,22 +59,24 @@ export const handler: SQSHandler = async (event) => {
         userId?: string;
       };
       const { id, text, voiceId, userId } = body;
-      
+
       // 1. Synthesize speech (mock for local, real for production)
-      let audio: Buffer;
+      let audio: Buffer = Buffer.from([]);
       if (isLocal) {
-        audio = await mockPollySynthesize(text, voiceId || 'Joanna');
+        audio = await mockPollySynthesize(text, voiceId || VoiceId.Joanna);
       } else {
-        const synthRes = await polly!.send(
-          new SynthesizeSpeechCommand({
-            OutputFormat: 'mp3',
-            Text: text,
-            VoiceId: (voiceId || 'Joanna') as any,
-          })
-        );
-        audio = await streamToBuffer(synthRes.AudioStream);
+        const synthesizeSpeechCommand = new SynthesizeSpeechCommand({
+          OutputFormat: 'mp3',
+          Text: text,
+          VoiceId: (voiceId || VoiceId.Joanna) as VoiceId,
+        });
+        const synthRes = await polly!.send(synthesizeSpeechCommand);
+
+        if (!synthRes.AudioStream) {
+          audio = await streamToBuffer(synthRes.AudioStream);
+        }
       }
-      
+
       // 2. Upload to S3
       const s3Key = `soundbites/${id}.mp3`;
       await s3.send(
@@ -82,20 +90,24 @@ export const handler: SQSHandler = async (event) => {
             'voice-id': voiceId || 'Joanna',
             'text-length': text.length.toString(),
           },
-        })
+        }),
       );
-      
+
       // 3. Generate pre-signed URL
-      const url = await getSignedUrl(s3, new PutObjectCommand({
-        Bucket: BUCKET_NAME,
-        Key: s3Key,
-      }), { expiresIn: 60 * 60 * 24 }); // 24h
-      
+      const url = await getSignedUrl(
+        s3,
+        new PutObjectCommand({
+          Bucket: BUCKET_NAME,
+          Key: s3Key,
+        }),
+        { expiresIn: 60 * 60 * 24 },
+      ); // 24h
+
       // 4. Write metadata to DynamoDB with TTL
       const now = new Date().toISOString();
-      const ttl = Math.floor(Date.now() / 1000) + (30 * 24 * 60 * 60); // 30 days from now
-      
-      const item: any = {
+      const ttl = Math.floor(Date.now() / 1000) + 30 * 24 * 60 * 60; // 30 days from now
+
+      const item: PutItemInput['Item'] = {
         id: { S: id },
         text: { S: text },
         s3Key: { S: s3Key },
@@ -105,40 +117,53 @@ export const handler: SQSHandler = async (event) => {
         updatedAt: { S: now },
         ttl: { N: ttl.toString() }, // TTL for automatic cleanup
       };
-      
+
       if (voiceId) item.voiceId = { S: voiceId };
       if (userId) item.userId = { S: userId };
-      
+
       await dynamo.send(
         new PutItemCommand({
           TableName: TABLE_NAME,
           Item: item,
-        })
+        }),
       );
-      
+
       const processingTime = Date.now() - startTime;
-      console.log(`Successfully processed soundbite ${id} in ${processingTime}ms`);
-      
+      console.log(
+        `Successfully processed soundbite ${id} in ${processingTime}ms`,
+      );
     } catch (error) {
       const processingTime = Date.now() - startTime;
-      console.error(`Error processing message ${messageId} after ${processingTime}ms:`, {
-        error: error instanceof Error ? error.message : String(error),
-        stack: error instanceof Error ? error.stack : undefined,
-        messageId,
-        recordBody: record.body,
-      });
-      
+      console.error(
+        `Error processing message ${messageId} after ${processingTime}ms:`,
+        {
+          error: error instanceof Error ? error.message : String(error),
+          stack: error instanceof Error ? error.stack : undefined,
+          messageId,
+          recordBody: record.body,
+        },
+      );
+
       // Let Lambda retry, or send to DLQ
       throw error;
     }
   }
 };
 
-function streamToBuffer(stream: any): Promise<Buffer> {
-  return new Promise((resolve, reject) => {
-    const chunks: any[] = [];
-    stream.on('data', (chunk: any) => chunks.push(chunk));
-    stream.on('end', () => resolve(Buffer.concat(chunks)));
-    stream.on('error', reject);
-  });
-} 
+function streamToBuffer(stream: Readable | undefined): Promise<Buffer> {
+  if (!stream) {
+    throw new Error('Audio stream is undefined');
+  }
+
+  if (stream instanceof Blob) {
+    return stream.arrayBuffer().then((buffer) => Buffer.from(buffer));
+  } else {
+    // Handle Readable stream
+    return new Promise<Buffer>((resolve, reject) => {
+      const chunks: Buffer[] = [];
+      stream.on('data', (chunk: Buffer) => chunks.push(chunk));
+      stream.on('end', () => resolve(Buffer.concat(chunks)));
+      stream.on('error', reject);
+    });
+  }
+}

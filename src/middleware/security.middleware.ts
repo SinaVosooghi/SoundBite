@@ -1,17 +1,18 @@
 import { Injectable, NestMiddleware } from '@nestjs/common';
 import { Request, Response, NextFunction } from 'express';
 import helmet from 'helmet';
-import rateLimit from 'express-rate-limit';
+import rateLimit, { RateLimitRequestHandler } from 'express-rate-limit';
 import { ConfigService } from '@nestjs/config';
 
 @Injectable()
 export class SecurityMiddleware implements NestMiddleware {
-  private rateLimiter: any;
+  private rateLimiter: RateLimitRequestHandler;
 
   constructor(private configService: ConfigService) {
     // Configure rate limiting
     this.rateLimiter = rateLimit({
-      windowMs: this.configService.get('production.security.rateLimitTtl') * 1000, // Convert to milliseconds
+      windowMs:
+        this.configService.get('production.security.rateLimitTtl') * 1000, // Convert to milliseconds
       max: this.configService.get('production.security.rateLimitLimit'),
       message: {
         error: 'Too many requests from this IP, please try again later.',
@@ -47,5 +48,6 @@ export const securityHeaders = {
   'X-XSS-Protection': '1; mode=block',
   'Strict-Transport-Security': 'max-age=31536000; includeSubDomains',
   'Referrer-Policy': 'strict-origin-when-cross-origin',
-  'Content-Security-Policy': "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline';",
-}; 
+  'Content-Security-Policy':
+    "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline';",
+};

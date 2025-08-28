@@ -17,4 +17,4 @@ beforeAll(() => {
 afterAll(() => {
   console.log = originalConsoleLog;
   console.error = originalConsoleError;
-}); 
+});

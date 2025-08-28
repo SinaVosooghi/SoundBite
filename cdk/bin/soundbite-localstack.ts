@@ -18,8 +18,8 @@ const localstackConfig = {
     Environment: 'development-localstack',
     Project: 'SoundBite',
     Purpose: 'LocalStack Development',
-    CostCenter: 'development'
-  }
+    CostCenter: 'development',
+  },
 };
 
 // Create stacks optimized for LocalStack
@@ -27,31 +27,31 @@ const databaseStack = new DatabaseStack(app, 'SoundBite-LocalStack-Database', {
   ...localstackConfig,
   env: {
     account: '000000000000', // LocalStack default account
-    region: 'us-east-1'
-  }
+    region: 'us-east-1',
+  },
 });
 
 const storageStack = new StorageStack(app, 'SoundBite-LocalStack-Storage', {
   ...localstackConfig,
   env: {
     account: '000000000000', // LocalStack default account
-    region: 'us-east-1'
-  }
+    region: 'us-east-1',
+  },
 });
 
 const queueStack = new QueueStack(app, 'SoundBite-LocalStack-Queue', {
   ...localstackConfig,
   env: {
     account: '000000000000', // LocalStack default account
-    region: 'us-east-1'
-  }
+    region: 'us-east-1',
+  },
 });
 
 const computeStack = new ComputeStack(app, 'SoundBite-LocalStack-Compute', {
   ...localstackConfig,
   env: {
     account: '000000000000', // LocalStack default account
-    region: 'us-east-1'
+    region: 'us-east-1',
   },
   databaseTable: databaseStack.table,
   storageBucket: storageStack.bucket,

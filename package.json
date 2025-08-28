@@ -48,7 +48,8 @@
     "helmet": "^8.1.0",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1",
-    "uuid": "^11.1.0"
+    "uuid": "^11.1.0",
+    "zod": "^4.1.4"
   },
   "devDependencies": {
     "@aws-cdk/integ-runner": "^2.189.3",
@@ -69,6 +70,7 @@
     "@types/uuid": "^10.0.0",
     "aws-cdk": "^2.1023.0",
     "aws-cdk-lib": "^2.206.0",
+    "aws-sdk-client-mock": "^4.1.0",
     "cdk-nag": "^2.36.55",
     "constructs": "^10.4.2",
     "eslint": "^9.18.0",

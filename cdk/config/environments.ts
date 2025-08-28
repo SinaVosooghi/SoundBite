@@ -22,7 +22,7 @@ export const environments: Record<string, EnvironmentConfig> = {
     enableBackup: false,
     retentionDays: 7,
     features: ['basic', 'debug', 'local'],
-    description: 'Development environment for local testing and debugging'
+    description: 'Development environment for local testing and debugging',
   },
   staging: {
     name: 'staging',
@@ -34,7 +34,7 @@ export const environments: Record<string, EnvironmentConfig> = {
     enableBackup: false,
     retentionDays: 30,
     features: ['basic', 'monitoring', 'testing'],
-    description: 'Staging environment for testing and validation'
+    description: 'Staging environment for testing and validation',
   },
   production: {
     name: 'production',
@@ -46,24 +46,32 @@ export const environments: Record<string, EnvironmentConfig> = {
     enableBackup: true,
     retentionDays: 90,
     features: ['full', 'monitoring', 'backup', 'scaling'],
-    description: 'Production environment for live users'
-  }
+    description: 'Production environment for live users',
+  },
 };
 
 export const getEnvironmentConfig = (env: string): EnvironmentConfig => {
   const config = environments[env];
   if (!config) {
-    throw new Error(`Unknown environment: ${env}. Valid environments: ${Object.keys(environments).join(', ')}`);
+    throw new Error(
+      `Unknown environment: ${env}. Valid environments: ${Object.keys(environments).join(', ')}`,
+    );
   }
   return config;
 };
 
 export const getAllEnvironments = (): string[] => Object.keys(environments);
 
-export const getEnvironmentByPort = (port: number): EnvironmentConfig | null => {
-  return Object.values(environments).find(env => env.port === port) || null;
+export const getEnvironmentByPort = (
+  port: number,
+): EnvironmentConfig | null => {
+  return Object.values(environments).find((env) => env.port === port) || null;
 };
 
-export const getEnvironmentByPrefix = (prefix: string): EnvironmentConfig | null => {
-  return Object.values(environments).find(env => env.prefix === prefix) || null;
+export const getEnvironmentByPrefix = (
+  prefix: string,
+): EnvironmentConfig | null => {
+  return (
+    Object.values(environments).find((env) => env.prefix === prefix) || null
+  );
 };

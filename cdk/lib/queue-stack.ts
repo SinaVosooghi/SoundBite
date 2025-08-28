@@ -2,7 +2,11 @@ import * as cdk from 'aws-cdk-lib';
 import { Construct } from 'constructs';
 import * as sqs from 'aws-cdk-lib/aws-sqs';
 import * as cloudwatch from 'aws-cdk-lib/aws-cloudwatch';
-import { EnvironmentConfig, getEnvironmentConfig, getAllEnvironments } from '../config';
+import {
+  EnvironmentConfig,
+  getEnvironmentConfig,
+  getAllEnvironments,
+} from '../config';
 
 export interface QueueStackProps extends cdk.StackProps {
   projectName: string;
@@ -71,12 +75,16 @@ export class QueueStack extends cdk.Stack {
       alarmDescription: 'SQS DLQ has messages (processing failures)',
     });
 
-    const ageOfOldestMessageAlarm = new cloudwatch.Alarm(this, 'AgeOfOldestMessageAlarm', {
-      metric: this.queue.metricApproximateAgeOfOldestMessage(),
-      threshold: 300, // 5 minutes
-      evaluationPeriods: 2,
-      alarmDescription: 'SQS messages older than 5 minutes',
-    });
+    const ageOfOldestMessageAlarm = new cloudwatch.Alarm(
+      this,
+      'AgeOfOldestMessageAlarm',
+      {
+        metric: this.queue.metricApproximateAgeOfOldestMessage(),
+        threshold: 300, // 5 minutes
+        evaluationPeriods: 2,
+        alarmDescription: 'SQS messages older than 5 minutes',
+      },
+    );
 
     // Outputs
     new cdk.CfnOutput(this, 'QueueUrl', {
@@ -110,4 +118,4 @@ export class QueueStack extends cdk.Stack {
       cdk.Tags.of(this).add('MultiEnvironment', 'true');
     }
   }
-} 
+}

@@ -39,7 +39,10 @@ export default registerAs('production', () => ({
 
   // Storage Configuration
   storage: {
-    s3PresignedUrlExpiration: parseInt(process.env.S3_PRESIGNED_URL_EXPIRATION || '86400', 10), // 24 hours
+    s3PresignedUrlExpiration: parseInt(
+      process.env.S3_PRESIGNED_URL_EXPIRATION || '86400',
+      10,
+    ), // 24 hours
     dynamoDBTTL: parseInt(process.env.DYNAMODB_TTL_DAYS || '30', 10), // 30 days
   },
-})); 
+}));

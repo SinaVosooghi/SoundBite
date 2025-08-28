@@ -5,20 +5,21 @@ export const stagingConfig = {
     region: 'us-east-1',
     credentials: {
       // Uses EC2 instance role
-    }
+    },
   },
   services: {
     dynamodb: {
       tableName: 'SoundBite-MultiEnv-SoundbitesTable',
-      endpoint: undefined
+      endpoint: undefined,
     },
     s3: {
       bucketName: 'soundbite-multienv-soundbites-762233763891',
-      endpoint: undefined
+      endpoint: undefined,
     },
     sqs: {
-      queueUrl: 'https://sqs.us-east-1.amazonaws.com/762233763891/SoundBite-MultiEnv-SoundbiteQueue',
-      endpoint: undefined
-    }
-  }
+      queueUrl:
+        'https://sqs.us-east-1.amazonaws.com/762233763891/SoundBite-MultiEnv-SoundbiteQueue',
+      endpoint: undefined,
+    },
+  },
 };

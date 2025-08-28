@@ -26,66 +26,68 @@ export class StorageStack extends cdk.Stack {
       blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
       removalPolicy: cdk.RemovalPolicy.DESTROY, // For demo - use RETAIN in production
       autoDeleteObjects: false, // Keep control over deletion
-      lifecycleRules: props.enableMultiEnvironment ? [
-        // Multi-environment lifecycle rules
-        {
-          id: 'DevelopmentRetention',
-          enabled: true,
-          prefix: 'development/',
-          expiration: cdk.Duration.days(60), // Must be > transition days (30)
-          transitions: [
+      lifecycleRules: props.enableMultiEnvironment
+        ? [
+            // Multi-environment lifecycle rules
             {
-              storageClass: s3.StorageClass.INFREQUENT_ACCESS,
-              transitionAfter: cdk.Duration.days(30), // AWS requires >= 30 days
-            }
-          ],
-        },
-        {
-          id: 'StagingRetention',
-          enabled: true,
-          prefix: 'staging/',
-          expiration: cdk.Duration.days(90), // Must be > transition days (30)
-          transitions: [
-            {
-              storageClass: s3.StorageClass.INFREQUENT_ACCESS,
-              transitionAfter: cdk.Duration.days(30), // AWS requires >= 30 days
-            }
-          ],
-        },
-        {
-          id: 'ProductionRetention',
-          enabled: true,
-          prefix: 'production/',
-          expiration: cdk.Duration.days(180), // Must be > transition days (90)
-          transitions: [
-            {
-              storageClass: s3.StorageClass.INFREQUENT_ACCESS,
-              transitionAfter: cdk.Duration.days(30), // AWS requires >= 30 days
+              id: 'DevelopmentRetention',
+              enabled: true,
+              prefix: 'development/',
+              expiration: cdk.Duration.days(60), // Must be > transition days (30)
+              transitions: [
+                {
+                  storageClass: s3.StorageClass.INFREQUENT_ACCESS,
+                  transitionAfter: cdk.Duration.days(30), // AWS requires >= 30 days
+                },
+              ],
             },
             {
-              storageClass: s3.StorageClass.GLACIER,
-              transitionAfter: cdk.Duration.days(90), // AWS requires >= 90 days
-            }
-          ],
-        }
-      ] : [
-        // Single environment lifecycle rules (keep existing)
-        {
-          id: 'DeleteOldSoundbites',
-          enabled: true,
-          expiration: cdk.Duration.days(90), // Delete files after 90 days
-          transitions: [
-            {
-              storageClass: s3.StorageClass.INFREQUENT_ACCESS,
-              transitionAfter: cdk.Duration.days(30), // AWS requires >= 30 days
+              id: 'StagingRetention',
+              enabled: true,
+              prefix: 'staging/',
+              expiration: cdk.Duration.days(90), // Must be > transition days (30)
+              transitions: [
+                {
+                  storageClass: s3.StorageClass.INFREQUENT_ACCESS,
+                  transitionAfter: cdk.Duration.days(30), // AWS requires >= 30 days
+                },
+              ],
             },
             {
-              storageClass: s3.StorageClass.GLACIER,
-              transitionAfter: cdk.Duration.days(60), // AWS best practice: >= 60 days
+              id: 'ProductionRetention',
+              enabled: true,
+              prefix: 'production/',
+              expiration: cdk.Duration.days(180), // Must be > transition days (90)
+              transitions: [
+                {
+                  storageClass: s3.StorageClass.INFREQUENT_ACCESS,
+                  transitionAfter: cdk.Duration.days(30), // AWS requires >= 30 days
+                },
+                {
+                  storageClass: s3.StorageClass.GLACIER,
+                  transitionAfter: cdk.Duration.days(90), // AWS requires >= 90 days
+                },
+              ],
+            },
+          ]
+        : [
+            // Single environment lifecycle rules (keep existing)
+            {
+              id: 'DeleteOldSoundbites',
+              enabled: true,
+              expiration: cdk.Duration.days(90), // Delete files after 90 days
+              transitions: [
+                {
+                  storageClass: s3.StorageClass.INFREQUENT_ACCESS,
+                  transitionAfter: cdk.Duration.days(30), // AWS requires >= 30 days
+                },
+                {
+                  storageClass: s3.StorageClass.GLACIER,
+                  transitionAfter: cdk.Duration.days(60), // AWS best practice: >= 60 days
+                },
+              ],
             },
           ],
-        },
-      ],
     });
 
     // CloudWatch Alarms for monitoring (keep same for Free Tier)
@@ -105,21 +107,25 @@ export class StorageStack extends cdk.Stack {
       alarmDescription: 'S3 bucket size exceeded 10GB',
     });
 
-    const numberOfObjectsAlarm = new cloudwatch.Alarm(this, 'NumberOfObjectsAlarm', {
-      metric: new cloudwatch.Metric({
-        namespace: 'AWS/S3',
-        metricName: 'NumberOfObjects',
-        dimensionsMap: {
-          BucketName: this.bucket.bucketName,
-          StorageType: 'AllStorageTypes',
-        },
-        statistic: 'Average',
-        period: cdk.Duration.hours(1),
-      }),
-      threshold: 10000,
-      evaluationPeriods: 2,
-      alarmDescription: 'S3 bucket has more than 10,000 objects',
-    });
+    const numberOfObjectsAlarm = new cloudwatch.Alarm(
+      this,
+      'NumberOfObjectsAlarm',
+      {
+        metric: new cloudwatch.Metric({
+          namespace: 'AWS/S3',
+          metricName: 'NumberOfObjects',
+          dimensionsMap: {
+            BucketName: this.bucket.bucketName,
+            StorageType: 'AllStorageTypes',
+          },
+          statistic: 'Average',
+          period: cdk.Duration.hours(1),
+        }),
+        threshold: 10000,
+        evaluationPeriods: 2,
+        alarmDescription: 'S3 bucket has more than 10,000 objects',
+      },
+    );
 
     // Outputs
     new cdk.CfnOutput(this, 'BucketName', {
@@ -145,4 +151,4 @@ export class StorageStack extends cdk.Stack {
       cdk.Tags.of(this).add('MultiEnvironment', 'true');
     }
   }
-} 
+}

@@ -23,7 +23,9 @@ async function bootstrap() {
   // Swagger/OpenAPI documentation
   const config = new DocumentBuilder()
     .setTitle('Shareable Soundbite API')
-    .setDescription('A serverless API for creating shareable MP3 soundbites from text using AWS Polly TTS')
+    .setDescription(
+      'A serverless API for creating shareable MP3 soundbites from text using AWS Polly TTS',
+    )
     .setVersion('1.0')
     .addTag('soundbites')
     .build();
@@ -31,14 +33,16 @@ async function bootstrap() {
   SwaggerModule.setup('api', app, document);
 
   await app.listen(envConfig.port);
-  console.log(`🚀 Application is running on: http://localhost:${envConfig.port}`);
+  console.log(
+    `🚀 Application is running on: http://localhost:${envConfig.port}`,
+  );
   console.log(`🌍 Environment: ${getEnvironmentName()}`);
   console.log(`📚 API Documentation: http://localhost:${envConfig.port}/api`);
-  
+
   if (envConfig.aws.endpoint) {
     console.log(`🔗 AWS Endpoint: ${envConfig.aws.endpoint}`);
   } else {
     console.log(`🔗 AWS Endpoint: AWS default (${envConfig.aws.region})`);
   }
 }
-bootstrap();
+void bootstrap();

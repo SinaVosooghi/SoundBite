@@ -9,6 +9,7 @@ import * as ecr from 'aws-cdk-lib/aws-ecr';
 import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
 import * as s3 from 'aws-cdk-lib/aws-s3';
 import * as sqs from 'aws-cdk-lib/aws-sqs';
+import * as ec2 from 'aws-cdk-lib/aws-ec2';
 
 export interface ComputeStackProps extends cdk.StackProps {
   projectName: string;
@@ -21,6 +22,11 @@ export interface ComputeStackProps extends cdk.StackProps {
 export class ComputeStack extends cdk.Stack {
   public readonly ecrRepository: ecr.Repository;
   public readonly lambdaFunction: lambda.Function;
+  public readonly lambdaRole: iam.Role;
+  public readonly lambdaSecurityGroup: ec2.SecurityGroup;
+  private lambdaErrorsAlarm: cloudwatch.Alarm;
+  private lambdaDurationAlarm: cloudwatch.Alarm;
+  private lambdaThrottlesAlarm: cloudwatch.Alarm;
 
   constructor(scope: Construct, id: string, props: ComputeStackProps) {
     super(scope, id, props);
@@ -33,20 +39,22 @@ export class ComputeStack extends cdk.Stack {
     });
 
     // Lambda IAM Role with least privilege
-    const lambdaRole = new iam.Role(this, 'SoundbiteProcessorRole', {
+    this.lambdaRole = new iam.Role(this, 'SoundbiteProcessorRole', {
       assumedBy: new iam.ServicePrincipal('lambda.amazonaws.com'),
       managedPolicies: [
-        iam.ManagedPolicy.fromAwsManagedPolicyName('service-role/AWSLambdaBasicExecutionRole'),
+        iam.ManagedPolicy.fromAwsManagedPolicyName(
+          'service-role/AWSLambdaBasicExecutionRole',
+        ),
       ],
     });
 
     // Grant specific permissions
-    props.messageQueue.grantConsumeMessages(lambdaRole);
-    props.storageBucket.grantWrite(lambdaRole);
-    props.databaseTable.grantWriteData(lambdaRole);
+    props.messageQueue.grantConsumeMessages(this.lambdaRole);
+    props.storageBucket.grantWrite(this.lambdaRole);
+    props.databaseTable.grantWriteData(this.lambdaRole);
 
     // Polly permissions
-    lambdaRole.addToPolicy(
+    this.lambdaRole.addToPolicy(
       new iam.PolicyStatement({
         effect: iam.Effect.ALLOW,
         actions: ['polly:SynthesizeSpeech'],
@@ -60,7 +68,7 @@ export class ComputeStack extends cdk.Stack {
       runtime: lambda.Runtime.NODEJS_18_X,
       handler: 'index.handler',
       code: lambda.Code.fromAsset('../lambda/processor'),
-      role: lambdaRole,
+      role: this.lambdaRole,
       timeout: cdk.Duration.seconds(120), // Must be less than SQS visibility timeout
       memorySize: 512,
       environment: {
@@ -79,27 +87,53 @@ export class ComputeStack extends cdk.Stack {
       }),
     );
 
-    // CloudWatch Alarms for Lambda monitoring
-    const lambdaErrorsAlarm = new cloudwatch.Alarm(this, 'LambdaErrorsAlarm', {
-      metric: this.lambdaFunction.metricErrors(),
+    // Create CloudWatch alarms for monitoring
+    this.lambdaErrorsAlarm = new cloudwatch.Alarm(this, 'LambdaErrorsAlarm', {
+      metric: new cloudwatch.Metric({
+        namespace: 'AWS/Lambda',
+        metricName: 'Errors',
+        dimensionsMap: { FunctionName: this.lambdaFunction.functionName },
+        statistic: 'Sum',
+        period: cdk.Duration.minutes(5),
+      }),
       threshold: 1,
-      evaluationPeriods: 1,
-      alarmDescription: 'Lambda function errors',
-    });
-
-    const lambdaDurationAlarm = new cloudwatch.Alarm(this, 'LambdaDurationAlarm', {
-      metric: this.lambdaFunction.metricDuration(),
-      threshold: 250000, // 250 seconds
       evaluationPeriods: 2,
-      alarmDescription: 'Lambda function duration exceeded 250 seconds',
+      alarmDescription: 'Lambda function errors exceeded threshold',
     });
 
-    const lambdaThrottlesAlarm = new cloudwatch.Alarm(this, 'LambdaThrottlesAlarm', {
-      metric: this.lambdaFunction.metricThrottles(),
-      threshold: 1,
-      evaluationPeriods: 1,
-      alarmDescription: 'Lambda function throttles',
-    });
+    this.lambdaDurationAlarm = new cloudwatch.Alarm(
+      this,
+      'LambdaDurationAlarm',
+      {
+        metric: new cloudwatch.Metric({
+          namespace: 'AWS/Lambda',
+          metricName: 'Duration',
+          dimensionsMap: { FunctionName: this.lambdaFunction.functionName },
+          statistic: 'Average',
+          period: cdk.Duration.minutes(5),
+        }),
+        threshold: 30000, // 30 seconds
+        evaluationPeriods: 2,
+        alarmDescription: 'Lambda function duration exceeded threshold',
+      },
+    );
+
+    this.lambdaThrottlesAlarm = new cloudwatch.Alarm(
+      this,
+      'LambdaThrottlesAlarm',
+      {
+        metric: new cloudwatch.Metric({
+          namespace: 'AWS/Lambda',
+          metricName: 'Throttles',
+          dimensionsMap: { FunctionName: this.lambdaFunction.functionName },
+          statistic: 'Sum',
+          period: cdk.Duration.minutes(5),
+        }),
+        threshold: 1,
+        evaluationPeriods: 2,
+        alarmDescription: 'Lambda function throttles exceeded threshold',
+      },
+    );
 
     // Outputs
     new cdk.CfnOutput(this, 'EcrRepositoryUri', {
@@ -124,4 +158,4 @@ export class ComputeStack extends cdk.Stack {
     cdk.Tags.of(this).add('Service', 'Compute');
     cdk.Tags.of(this).add('Component', 'Lambda-ECR');
   }
-} 
+}

@@ -70,9 +70,11 @@ export class EnvironmentLoader {
   }
 
   public isRealAWS(): boolean {
-    return this.currentConfig.name === 'development-aws' || 
-           this.currentConfig.name === 'staging' || 
-           this.currentConfig.name === 'production';
+    return (
+      this.currentConfig.name === 'development-aws' ||
+      this.currentConfig.name === 'staging' ||
+      this.currentConfig.name === 'production'
+    );
   }
 
   private detectEnvironment(): EnvironmentConfig {

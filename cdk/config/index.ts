@@ -3,23 +3,23 @@ export * from './environments';
 export * from './shared-config';
 
 // Re-export commonly used types and functions
-export { 
-  EnvironmentConfig, 
-  environments, 
-  getEnvironmentConfig, 
+export {
+  EnvironmentConfig,
+  environments,
+  getEnvironmentConfig,
   getAllEnvironments,
   getEnvironmentByPort,
-  getEnvironmentByPrefix 
+  getEnvironmentByPrefix,
 } from './environments';
 
-export { 
-  SharedConfig, 
-  sharedConfig, 
+export {
+  SharedConfig,
+  sharedConfig,
   getSharedConfig,
   getCostOptimizationConfig,
   getMonitoringConfig,
   getSecurityConfig,
-  getPerformanceConfig
+  getPerformanceConfig,
 } from './shared-config';
 
 // Import the actual values for the default export
