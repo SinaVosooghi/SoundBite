@@ -1,0 +1,375 @@
+name: Monitoring and Health Checks
+
+on:
+  schedule:
+    # Run health checks every 15 minutes
+    - cron: '*/15 * * * *'
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to monitor'
+        required: true
+        default: 'production'
+        type: choice
+        options:
+          - staging
+          - production
+      check_type:
+        description: 'Type of check to run'
+        required: true
+        default: 'all'
+        type: choice
+        options:
+          - all
+          - health
+          - performance
+          - security
+
+env:
+  AWS_REGION: us-east-1
+
+jobs:
+  health-check:
+    name: Health Check
+    runs-on: ubuntu-latest
+    if: github.event.inputs.check_type == 'all' || github.event.inputs.check_type == 'health' || github.event_name == 'schedule'
+    environment: ${{ github.event.inputs.environment || 'production' }}
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Check API health
+        id: api-health
+        run: |
+          # Get API endpoint from CloudFormation outputs
+          API_ENDPOINT=$(aws cloudformation describe-stacks \
+            --stack-name SoundBite-API \
+            --query 'Stacks[0].Outputs[?OutputKey==`ApiEndpoint`].OutputValue' \
+            --output text)
+          
+          if [ -z "$API_ENDPOINT" ]; then
+            echo "❌ Could not retrieve API endpoint"
+            echo "status=failed" >> $GITHUB_OUTPUT
+            exit 1
+          fi
+          
+          echo "Testing API endpoint: $API_ENDPOINT"
+          
+          # Test health endpoint
+          HEALTH_RESPONSE=$(curl -s -w "%{http_code}" -o /tmp/health_response.json "$API_ENDPOINT/health")
+          
+          if [ "$HEALTH_RESPONSE" = "200" ]; then
+            echo "✅ API health check passed"
+            echo "status=success" >> $GITHUB_OUTPUT
+            cat /tmp/health_response.json
+          else
+            echo "❌ API health check failed with status: $HEALTH_RESPONSE"
+            echo "status=failed" >> $GITHUB_OUTPUT
+            cat /tmp/health_response.json || echo "No response body"
+            exit 1
+          fi
+
+      - name: Check DynamoDB table
+        id: dynamodb-health
+        run: |
+          TABLE_NAME="SoundBite-${{ github.event.inputs.environment || 'production' }}-SoundbitesTable"
+          
+          TABLE_STATUS=$(aws dynamodb describe-table \
+            --table-name "$TABLE_NAME" \
+            --query 'Table.TableStatus' \
+            --output text 2>/dev/null || echo "NOT_FOUND")
+          
+          if [ "$TABLE_STATUS" = "ACTIVE" ]; then
+            echo "✅ DynamoDB table is active"
+            echo "status=success" >> $GITHUB_OUTPUT
+          else
+            echo "❌ DynamoDB table status: $TABLE_STATUS"
+            echo "status=failed" >> $GITHUB_OUTPUT
+            exit 1
+          fi
+
+      - name: Check S3 bucket
+        id: s3-health
+        run: |
+          BUCKET_NAME="soundbite-${{ github.event.inputs.environment || 'production' }}-soundbites"
+          
+          if aws s3 ls "s3://$BUCKET_NAME" >/dev/null 2>&1; then
+            echo "✅ S3 bucket is accessible"
+            echo "status=success" >> $GITHUB_OUTPUT
+          else
+            echo "❌ S3 bucket is not accessible"
+            echo "status=failed" >> $GITHUB_OUTPUT
+            exit 1
+          fi
+
+      - name: Check SQS queue
+        id: sqs-health
+        run: |
+          QUEUE_URL=$(aws sqs get-queue-url \
+            --queue-name "SoundBite-${{ github.event.inputs.environment || 'production' }}-Queue" \
+            --query 'QueueUrl' \
+            --output text 2>/dev/null || echo "NOT_FOUND")
+          
+          if [ "$QUEUE_URL" != "NOT_FOUND" ]; then
+            # Get queue attributes
+            QUEUE_ATTRS=$(aws sqs get-queue-attributes \
+              --queue-url "$QUEUE_URL" \
+              --attribute-names ApproximateNumberOfMessages,ApproximateNumberOfMessagesNotVisible)
+            
+            echo "✅ SQS queue is accessible"
+            echo "Queue attributes: $QUEUE_ATTRS"
+            echo "status=success" >> $GITHUB_OUTPUT
+          else
+            echo "❌ SQS queue not found"
+            echo "status=failed" >> $GITHUB_OUTPUT
+            exit 1
+          fi
+
+      - name: Check Lambda function
+        id: lambda-health
+        run: |
+          FUNCTION_NAME="SoundBite-${{ github.event.inputs.environment || 'production' }}-Processor"
+          
+          FUNCTION_STATUS=$(aws lambda get-function \
+            --function-name "$FUNCTION_NAME" \
+            --query 'Configuration.State' \
+            --output text 2>/dev/null || echo "NOT_FOUND")
+          
+          if [ "$FUNCTION_STATUS" = "Active" ]; then
+            echo "✅ Lambda function is active"
+            echo "status=success" >> $GITHUB_OUTPUT
+          else
+            echo "❌ Lambda function status: $FUNCTION_STATUS"
+            echo "status=failed" >> $GITHUB_OUTPUT
+            exit 1
+          fi
+
+  performance-monitoring:
+    name: Performance Monitoring
+    runs-on: ubuntu-latest
+    if: github.event.inputs.check_type == 'all' || github.event.inputs.check_type == 'performance'
+    environment: ${{ github.event.inputs.environment || 'production' }}
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Check CloudWatch metrics
+        run: |
+          # Get API Gateway metrics
+          echo "Checking API Gateway metrics..."
+          aws cloudwatch get-metric-statistics \
+            --namespace AWS/ApiGateway \
+            --metric-name Latency \
+            --dimensions Name=ApiName,Value=SoundBite-API \
+            --start-time $(date -u -d '1 hour ago' +%Y-%m-%dT%H:%M:%S) \
+            --end-time $(date -u +%Y-%m-%dT%H:%M:%S) \
+            --period 300 \
+            --statistics Average,Maximum \
+            --query 'Datapoints[*].[Timestamp,Average,Maximum]' \
+            --output table
+          
+          # Get Lambda metrics
+          echo "Checking Lambda metrics..."
+          aws cloudwatch get-metric-statistics \
+            --namespace AWS/Lambda \
+            --metric-name Duration \
+            --dimensions Name=FunctionName,Value=SoundBite-${{ github.event.inputs.environment || 'production' }}-Processor \
+            --start-time $(date -u -d '1 hour ago' +%Y-%m-%dT%H:%M:%S) \
+            --end-time $(date -u +%Y-%m-%dT%H:%M:%S) \
+            --period 300 \
+            --statistics Average,Maximum \
+            --query 'Datapoints[*].[Timestamp,Average,Maximum]' \
+            --output table
+          
+          # Get DynamoDB metrics
+          echo "Checking DynamoDB metrics..."
+          aws cloudwatch get-metric-statistics \
+            --namespace AWS/DynamoDB \
+            --metric-name ConsumedReadCapacityUnits \
+            --dimensions Name=TableName,Value=SoundBite-${{ github.event.inputs.environment || 'production' }}-SoundbitesTable \
+            --start-time $(date -u -d '1 hour ago' +%Y-%m-%dT%H:%M:%S) \
+            --end-time $(date -u +%Y-%m-%dT%H:%M:%S) \
+            --period 300 \
+            --statistics Sum \
+            --query 'Datapoints[*].[Timestamp,Sum]' \
+            --output table
+
+      - name: Check for CloudWatch alarms
+        run: |
+          echo "Checking CloudWatch alarms..."
+          ALARMS=$(aws cloudwatch describe-alarms \
+            --state-value ALARM \
+            --query 'MetricAlarms[?starts_with(AlarmName, `SoundBite`)].[AlarmName,StateReason]' \
+            --output table)
+          
+          if [ -n "$ALARMS" ] && [ "$ALARMS" != "None" ]; then
+            echo "❌ Active alarms found:"
+            echo "$ALARMS"
+            exit 1
+          else
+            echo "✅ No active alarms"
+          fi
+
+  security-monitoring:
+    name: Security Monitoring
+    runs-on: ubuntu-latest
+    if: github.event.inputs.check_type == 'all' || github.event.inputs.check_type == 'security'
+    environment: ${{ github.event.inputs.environment || 'production' }}
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Check AWS Config compliance
+        run: |
+          echo "Checking AWS Config compliance..."
+          
+          # Check for non-compliant resources
+          NON_COMPLIANT=$(aws configservice get-compliance-summary-by-resource-type \
+            --query 'ComplianceSummaryByResourceType[?ComplianceSummary.NonCompliantResourceCount.CappedCount > `0`]' \
+            --output json)
+          
+          if [ "$NON_COMPLIANT" != "[]" ]; then
+            echo "❌ Non-compliant resources found:"
+            echo "$NON_COMPLIANT"
+            exit 1
+          else
+            echo "✅ All resources are compliant"
+          fi
+
+      - name: Check CloudTrail logs
+        run: |
+          echo "Checking recent CloudTrail events..."
+          
+          # Look for suspicious activities in the last hour
+          aws logs filter-log-events \
+            --log-group-name CloudTrail/SoundBite \
+            --start-time $(date -d '1 hour ago' +%s)000 \
+            --filter-pattern '{ $.errorCode = "*" || $.errorMessage = "*" }' \
+            --query 'events[*].[eventTime,eventName,errorCode,errorMessage]' \
+            --output table || echo "No CloudTrail log group found or no errors in the last hour"
+
+      - name: Check VPC Flow Logs
+        run: |
+          echo "Checking VPC Flow Logs for anomalies..."
+          
+          # Check for rejected connections
+          aws logs filter-log-events \
+            --log-group-name /aws/vpc/flowlogs \
+            --start-time $(date -d '1 hour ago' +%s)000 \
+            --filter-pattern '[timestamp, account, eni, source, destination, srcport, destport, protocol, packets, bytes, windowstart, windowend, action="REJECT"]' \
+            --query 'events[*].message' \
+            --output text | head -10 || echo "No VPC Flow Logs found or no rejected connections"
+
+  alert-on-failure:
+    name: Alert on Failure
+    runs-on: ubuntu-latest
+    needs: [health-check, performance-monitoring, security-monitoring]
+    if: always() && (needs.health-check.result == 'failure' || needs.performance-monitoring.result == 'failure' || needs.security-monitoring.result == 'failure')
+    
+    steps:
+      - name: Send Slack notification
+        if: env.SLACK_WEBHOOK_URL != ''
+        run: |
+          ENVIRONMENT="${{ github.event.inputs.environment || 'production' }}"
+          
+          # Determine which checks failed
+          FAILED_CHECKS=""
+          if [ "${{ needs.health-check.result }}" = "failure" ]; then
+            FAILED_CHECKS="$FAILED_CHECKS Health Check,"
+          fi
+          if [ "${{ needs.performance-monitoring.result }}" = "failure" ]; then
+            FAILED_CHECKS="$FAILED_CHECKS Performance Monitoring,"
+          fi
+          if [ "${{ needs.security-monitoring.result }}" = "failure" ]; then
+            FAILED_CHECKS="$FAILED_CHECKS Security Monitoring,"
+          fi
+          
+          # Remove trailing comma
+          FAILED_CHECKS=${FAILED_CHECKS%,}
+          
+          curl -X POST -H 'Content-type: application/json' \
+            --data "{
+              \"text\": \"🚨 SoundBite Monitoring Alert\",
+              \"attachments\": [{
+                \"color\": \"danger\",
+                \"fields\": [
+                  {\"title\": \"Environment\", \"value\": \"$ENVIRONMENT\", \"short\": true},
+                  {\"title\": \"Failed Checks\", \"value\": \"$FAILED_CHECKS\", \"short\": true},
+                  {\"title\": \"Workflow\", \"value\": \"<${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|View Details>\", \"short\": false}
+                ]
+              }]
+            }" \
+            ${{ env.SLACK_WEBHOOK_URL }}
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+
+      - name: Create GitHub issue
+        if: github.event_name == 'schedule'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const environment = '${{ github.event.inputs.environment || 'production' }}';
+            const failedChecks = [];
+            
+            if ('${{ needs.health-check.result }}' === 'failure') {
+              failedChecks.push('Health Check');
+            }
+            if ('${{ needs.performance-monitoring.result }}' === 'failure') {
+              failedChecks.push('Performance Monitoring');
+            }
+            if ('${{ needs.security-monitoring.result }}' === 'failure') {
+              failedChecks.push('Security Monitoring');
+            }
+            
+            const title = `🚨 Monitoring Alert: ${failedChecks.join(', ')} Failed (${environment})`;
+            const body = `
+            ## Monitoring Alert
+            
+            **Environment:** ${environment}
+            **Failed Checks:** ${failedChecks.join(', ')}
+            **Workflow Run:** [View Details](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})
+            **Time:** ${new Date().toISOString()}
+            
+            ### Next Steps
+            1. Check the workflow logs for detailed error information
+            2. Verify the affected services are operational
+            3. Investigate and resolve any issues
+            4. Close this issue once resolved
+            
+            ### Labels
+            - incident
+            - monitoring
+            - ${environment}
+            `;
+            
+            github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: title,
+              body: body,
+              labels: ['incident', 'monitoring', environment]
+            });

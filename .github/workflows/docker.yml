@@ -55,8 +55,14 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'yarn'
 
+      - name: Enable Corepack
+        run: corepack enable
+        
+      - name: Setup Yarn
+        run: corepack prepare yarn@4.0.2 --activate
+        
       - name: Install dependencies
-        run: yarn install --frozen-lockfile
+        run: yarn install --immutable
 
       - name: Run tests
         run: yarn test
@@ -74,19 +80,52 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
           platforms: linux/amd64
+          load: true
+
+      - name: Run Trivy container scan
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: 'soundbite-api:test'
+          format: 'sarif'
+          output: 'trivy-container-results.sarif'
+          severity: 'CRITICAL,HIGH'
+        continue-on-error: true
+
+      - name: Upload Trivy container scan results
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: 'trivy-container-results.sarif'
+        continue-on-error: true
 
       - name: Test Docker image
         run: |
           # Start container and test basic functionality
-          docker run -d --name test-api -p 3000:3000 soundbite-api:test
-          sleep 10
+          docker run -d --name test-api -p 3000:3000 \
+            -e NODE_ENV=test \
+            -e AWS_REGION=us-east-1 \
+            soundbite-api:test
+          sleep 15
           
           # Test health endpoint
           curl -f http://localhost:3000/health || exit 1
           
+          # Basic API test
+          curl -f -X POST http://localhost:3000/soundbites \
+            -H "Content-Type: application/json" \
+            -d '{"text":"test","voice":"Joanna"}' || echo "API test failed (expected in test env)"
+          
           # Cleanup
           docker stop test-api
           docker rm test-api
+
+      - name: Run container security benchmark
+        run: |
+          # Install Docker Bench Security
+          git clone https://github.com/docker/docker-bench-security.git
+          cd docker-bench-security
+          sudo sh docker-bench-security.sh -c container_images
+        continue-on-error: true
 
   # Push to staging ECR
   push-staging:

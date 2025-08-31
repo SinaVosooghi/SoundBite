@@ -1,0 +1,645 @@
+name: Health Checks
+
+permissions:
+  contents: read
+  actions: read
+  pull-requests: write
+
+on:
+  workflow_call:
+    inputs:
+      environment:
+        required: true
+        type: string
+      api_endpoint:
+        required: false
+        type: string
+      timeout_minutes:
+        required: false
+        type: number
+        default: 10
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to check'
+        required: true
+        type: choice
+        options:
+          - development
+          - staging
+          - production
+      check_type:
+        description: 'Type of health check'
+        required: true
+        default: 'comprehensive'
+        type: choice
+        options:
+          - basic
+          - comprehensive
+          - performance
+          - security
+      timeout_minutes:
+        description: 'Timeout in minutes'
+        required: false
+        type: number
+        default: 10
+
+env:
+  AWS_REGION: us-east-1
+
+jobs:
+  basic-health-check:
+    name: Basic Health Check
+    runs-on: ubuntu-latest
+    if: inputs.check_type == 'basic' || inputs.check_type == 'comprehensive' || github.event_name == 'workflow_call'
+    environment: ${{ inputs.environment }}
+    
+    outputs:
+      api_endpoint: ${{ steps.get-endpoints.outputs.api_endpoint }}
+      health_status: ${{ steps.health-check.outputs.status }}
+    
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Get service endpoints
+        id: get-endpoints
+        run: |
+          ENVIRONMENT="${{ inputs.environment }}"
+          
+          # Get API endpoint from CloudFormation
+          API_ENDPOINT=$(aws cloudformation describe-stacks \
+            --stack-name "SoundBite-${ENVIRONMENT}-API" \
+            --query 'Stacks[0].Outputs[?OutputKey==`ApiEndpoint`].OutputValue' \
+            --output text 2>/dev/null || echo "")
+          
+          if [ -z "$API_ENDPOINT" ]; then
+            # Try alternative stack naming
+            API_ENDPOINT=$(aws cloudformation describe-stacks \
+              --stack-name "SoundBite-API-${ENVIRONMENT}" \
+              --query 'Stacks[0].Outputs[?OutputKey==`ApiEndpoint`].OutputValue' \
+              --output text 2>/dev/null || echo "")
+          fi
+          
+          # Use provided endpoint if stack lookup fails
+          if [ -z "$API_ENDPOINT" ] && [ -n "${{ inputs.api_endpoint }}" ]; then
+            API_ENDPOINT="${{ inputs.api_endpoint }}"
+          fi
+          
+          if [ -z "$API_ENDPOINT" ]; then
+            echo "❌ Could not determine API endpoint"
+            exit 1
+          fi
+          
+          echo "api_endpoint=$API_ENDPOINT" >> $GITHUB_OUTPUT
+          echo "🔍 API Endpoint: $API_ENDPOINT"
+
+      - name: Basic health check
+        id: health-check
+        run: |
+          API_ENDPOINT="${{ steps.get-endpoints.outputs.api_endpoint }}"
+          TIMEOUT_MINUTES="${{ inputs.timeout_minutes || 10 }}"
+          TIMEOUT_SECONDS=$((TIMEOUT_MINUTES * 60))
+          
+          echo "🔍 Starting health check for $API_ENDPOINT"
+          echo "⏱️  Timeout: ${TIMEOUT_MINUTES} minutes"
+          
+          # Health check with retry logic
+          START_TIME=$(date +%s)
+          SUCCESS=false
+          
+          while [ $(($(date +%s) - START_TIME)) -lt $TIMEOUT_SECONDS ]; do
+            echo "Checking health endpoint..."
+            
+            if RESPONSE=$(curl -s -w "%{http_code}" -o /tmp/health_response.json "$API_ENDPOINT/health" 2>/dev/null); then
+              HTTP_CODE="${RESPONSE: -3}"
+              
+              if [ "$HTTP_CODE" = "200" ]; then
+                echo "✅ Health check passed (HTTP $HTTP_CODE)"
+                
+                # Parse response if it's JSON
+                if jq . /tmp/health_response.json >/dev/null 2>&1; then
+                  echo "Health response:"
+                  cat /tmp/health_response.json | jq .
+                else
+                  echo "Health response (non-JSON):"
+                  cat /tmp/health_response.json
+                fi
+                
+                SUCCESS=true
+                break
+              else
+                echo "⚠️  Health check returned HTTP $HTTP_CODE"
+                cat /tmp/health_response.json 2>/dev/null || echo "No response body"
+              fi
+            else
+              echo "⚠️  Health check request failed"
+            fi
+            
+            echo "Retrying in 10 seconds..."
+            sleep 10
+          done
+          
+          if [ "$SUCCESS" = "true" ]; then
+            echo "status=healthy" >> $GITHUB_OUTPUT
+          else
+            echo "❌ Health check failed after ${TIMEOUT_MINUTES} minutes"
+            echo "status=unhealthy" >> $GITHUB_OUTPUT
+            exit 1
+          fi
+
+      - name: Test API endpoints
+        run: |
+          API_ENDPOINT="${{ steps.get-endpoints.outputs.api_endpoint }}"
+          
+          echo "🔍 Testing additional API endpoints..."
+          
+          # Test OpenAPI/Swagger endpoint
+          if curl -f -s "$API_ENDPOINT/api" >/dev/null 2>&1; then
+            echo "✅ OpenAPI documentation endpoint accessible"
+          else
+            echo "⚠️  OpenAPI documentation endpoint not accessible"
+          fi
+          
+          # Test metrics endpoint (if available)
+          if curl -f -s "$API_ENDPOINT/metrics" >/dev/null 2>&1; then
+            echo "✅ Metrics endpoint accessible"
+          else
+            echo "ℹ️  Metrics endpoint not available (expected)"
+          fi
+          
+          # Test CORS preflight
+          if curl -f -s -X OPTIONS \
+            -H "Origin: https://example.com" \
+            -H "Access-Control-Request-Method: POST" \
+            -H "Access-Control-Request-Headers: Content-Type" \
+            "$API_ENDPOINT/soundbites" >/dev/null 2>&1; then
+            echo "✅ CORS preflight working"
+          else
+            echo "⚠️  CORS preflight may not be configured"
+          fi
+
+  infrastructure-health-check:
+    name: Infrastructure Health Check
+    runs-on: ubuntu-latest
+    if: inputs.check_type == 'comprehensive' || github.event_name == 'workflow_call'
+    environment: ${{ inputs.environment }}
+    needs: basic-health-check
+    
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Check DynamoDB table
+        run: |
+          ENVIRONMENT="${{ inputs.environment }}"
+          TABLE_NAME="SoundBite-${ENVIRONMENT}-SoundbitesTable"
+          
+          echo "🔍 Checking DynamoDB table: $TABLE_NAME"
+          
+          TABLE_STATUS=$(aws dynamodb describe-table \
+            --table-name "$TABLE_NAME" \
+            --query 'Table.TableStatus' \
+            --output text 2>/dev/null || echo "NOT_FOUND")
+          
+          if [ "$TABLE_STATUS" = "ACTIVE" ]; then
+            echo "✅ DynamoDB table is active"
+            
+            # Get table metrics
+            ITEM_COUNT=$(aws dynamodb describe-table \
+              --table-name "$TABLE_NAME" \
+              --query 'Table.ItemCount' \
+              --output text)
+            
+            TABLE_SIZE=$(aws dynamodb describe-table \
+              --table-name "$TABLE_NAME" \
+              --query 'Table.TableSizeBytes' \
+              --output text)
+            
+            echo "📊 Table metrics:"
+            echo "  - Item count: $ITEM_COUNT"
+            echo "  - Table size: $TABLE_SIZE bytes"
+          else
+            echo "❌ DynamoDB table status: $TABLE_STATUS"
+            exit 1
+          fi
+
+      - name: Check S3 bucket
+        run: |
+          ENVIRONMENT="${{ inputs.environment }}"
+          BUCKET_NAME="soundbite-${ENVIRONMENT}-soundbites"
+          
+          echo "🔍 Checking S3 bucket: $BUCKET_NAME"
+          
+          if aws s3 ls "s3://$BUCKET_NAME" >/dev/null 2>&1; then
+            echo "✅ S3 bucket is accessible"
+            
+            # Get bucket info
+            OBJECT_COUNT=$(aws s3 ls "s3://$BUCKET_NAME" --recursive | wc -l)
+            echo "📊 Bucket contains $OBJECT_COUNT objects"
+            
+            # Check bucket policy
+            if aws s3api get-bucket-policy --bucket "$BUCKET_NAME" >/dev/null 2>&1; then
+              echo "✅ Bucket policy is configured"
+            else
+              echo "⚠️  No bucket policy found"
+            fi
+            
+            # Check bucket encryption
+            if aws s3api get-bucket-encryption --bucket "$BUCKET_NAME" >/dev/null 2>&1; then
+              echo "✅ Bucket encryption is enabled"
+            else
+              echo "⚠️  Bucket encryption not configured"
+            fi
+          else
+            echo "❌ S3 bucket is not accessible"
+            exit 1
+          fi
+
+      - name: Check SQS queue
+        run: |
+          ENVIRONMENT="${{ inputs.environment }}"
+          QUEUE_NAME="SoundBite-${ENVIRONMENT}-Queue"
+          
+          echo "🔍 Checking SQS queue: $QUEUE_NAME"
+          
+          QUEUE_URL=$(aws sqs get-queue-url \
+            --queue-name "$QUEUE_NAME" \
+            --query 'QueueUrl' \
+            --output text 2>/dev/null || echo "NOT_FOUND")
+          
+          if [ "$QUEUE_URL" != "NOT_FOUND" ]; then
+            echo "✅ SQS queue is accessible"
+            echo "📍 Queue URL: $QUEUE_URL"
+            
+            # Get queue attributes
+            QUEUE_ATTRS=$(aws sqs get-queue-attributes \
+              --queue-url "$QUEUE_URL" \
+              --attribute-names All \
+              --query 'Attributes' \
+              --output json)
+            
+            VISIBLE_MESSAGES=$(echo "$QUEUE_ATTRS" | jq -r '.ApproximateNumberOfMessages // "0"')
+            INVISIBLE_MESSAGES=$(echo "$QUEUE_ATTRS" | jq -r '.ApproximateNumberOfMessagesNotVisible // "0"')
+            DLQ_URL=$(echo "$QUEUE_ATTRS" | jq -r '.RedrivePolicy // empty' | jq -r '.deadLetterTargetArn // empty' 2>/dev/null || echo "")
+            
+            echo "📊 Queue metrics:"
+            echo "  - Visible messages: $VISIBLE_MESSAGES"
+            echo "  - In-flight messages: $INVISIBLE_MESSAGES"
+            
+            if [ -n "$DLQ_URL" ]; then
+              echo "✅ Dead letter queue configured"
+            else
+              echo "⚠️  No dead letter queue configured"
+            fi
+          else
+            echo "❌ SQS queue not found"
+            exit 1
+          fi
+
+      - name: Check Lambda function
+        run: |
+          ENVIRONMENT="${{ inputs.environment }}"
+          FUNCTION_NAME="SoundBite-${ENVIRONMENT}-Processor"
+          
+          echo "🔍 Checking Lambda function: $FUNCTION_NAME"
+          
+          FUNCTION_STATUS=$(aws lambda get-function \
+            --function-name "$FUNCTION_NAME" \
+            --query 'Configuration.State' \
+            --output text 2>/dev/null || echo "NOT_FOUND")
+          
+          if [ "$FUNCTION_STATUS" = "Active" ]; then
+            echo "✅ Lambda function is active"
+            
+            # Get function details
+            RUNTIME=$(aws lambda get-function \
+              --function-name "$FUNCTION_NAME" \
+              --query 'Configuration.Runtime' \
+              --output text)
+            
+            MEMORY=$(aws lambda get-function \
+              --function-name "$FUNCTION_NAME" \
+              --query 'Configuration.MemorySize' \
+              --output text)
+            
+            TIMEOUT=$(aws lambda get-function \
+              --function-name "$FUNCTION_NAME" \
+              --query 'Configuration.Timeout' \
+              --output text)
+            
+            echo "📊 Function configuration:"
+            echo "  - Runtime: $RUNTIME"
+            echo "  - Memory: ${MEMORY}MB"
+            echo "  - Timeout: ${TIMEOUT}s"
+            
+            # Check recent invocations
+            INVOCATIONS=$(aws logs filter-log-events \
+              --log-group-name "/aws/lambda/$FUNCTION_NAME" \
+              --start-time $(date -d '1 hour ago' +%s)000 \
+              --query 'events | length(@)' \
+              --output text 2>/dev/null || echo "0")
+            
+            echo "  - Recent invocations (1h): $INVOCATIONS"
+          else
+            echo "❌ Lambda function status: $FUNCTION_STATUS"
+            exit 1
+          fi
+
+  performance-health-check:
+    name: Performance Health Check
+    runs-on: ubuntu-latest
+    if: inputs.check_type == 'performance' || inputs.check_type == 'comprehensive'
+    environment: ${{ inputs.environment }}
+    needs: basic-health-check
+    
+    steps:
+      - name: Install performance testing tools
+        run: |
+          npm install -g artillery@latest
+
+      - name: Run performance health check
+        run: |
+          API_ENDPOINT="${{ needs.basic-health-check.outputs.api_endpoint }}"
+          
+          echo "🔍 Running performance health check against $API_ENDPOINT"
+          
+          # Create lightweight performance test
+          cat > health-perf-test.yml << EOF
+          config:
+            target: '$API_ENDPOINT'
+            phases:
+              - duration: 30
+                arrivalRate: 5
+                name: "Health check load test"
+            defaults:
+              headers:
+                Content-Type: 'application/json'
+          scenarios:
+            - name: "Health endpoint test"
+              weight: 100
+              flow:
+                - get:
+                    url: "/health"
+                    expect:
+                      - statusCode: 200
+          EOF
+          
+          # Run the test
+          artillery run health-perf-test.yml --output health-perf-results.json
+          
+          # Parse results
+          if [ -f health-perf-results.json ]; then
+            echo "📊 Performance results:"
+            
+            TOTAL_REQUESTS=$(cat health-perf-results.json | jq -r '.aggregate.counters["http.requests"] // 0')
+            AVG_RESPONSE_TIME=$(cat health-perf-results.json | jq -r '.aggregate.summaries["http.response_time"].mean // 0')
+            P95_RESPONSE_TIME=$(cat health-perf-results.json | jq -r '.aggregate.summaries["http.response_time"].p95 // 0')
+            ERROR_RATE=$(cat health-perf-results.json | jq -r '.aggregate.counters["http.request_rate"] // 0')
+            
+            echo "  - Total requests: $TOTAL_REQUESTS"
+            echo "  - Average response time: ${AVG_RESPONSE_TIME}ms"
+            echo "  - 95th percentile: ${P95_RESPONSE_TIME}ms"
+            echo "  - Error rate: $ERROR_RATE"
+            
+            # Check thresholds
+            if (( $(echo "$AVG_RESPONSE_TIME > 1000" | bc -l) )); then
+              echo "⚠️  Average response time is high (>${AVG_RESPONSE_TIME}ms)"
+            else
+              echo "✅ Average response time is acceptable"
+            fi
+            
+            if (( $(echo "$P95_RESPONSE_TIME > 2000" | bc -l) )); then
+              echo "⚠️  95th percentile response time is high (>${P95_RESPONSE_TIME}ms)"
+            else
+              echo "✅ 95th percentile response time is acceptable"
+            fi
+            
+            if (( $(echo "$ERROR_RATE > 0" | bc -l) )); then
+              echo "⚠️  Errors detected during performance test"
+            else
+              echo "✅ No errors during performance test"
+            fi
+          fi
+
+      - name: Check CloudWatch metrics
+        run: |
+          ENVIRONMENT="${{ inputs.environment }}"
+          
+          echo "🔍 Checking recent CloudWatch metrics..."
+          
+          # Check API Gateway metrics (if available)
+          echo "API Gateway metrics (last hour):"
+          aws cloudwatch get-metric-statistics \
+            --namespace AWS/ApiGateway \
+            --metric-name Latency \
+            --dimensions Name=ApiName,Value=SoundBite-${ENVIRONMENT} \
+            --start-time $(date -u -d '1 hour ago' +%Y-%m-%dT%H:%M:%S) \
+            --end-time $(date -u +%Y-%m-%dT%H:%M:%S) \
+            --period 300 \
+            --statistics Average,Maximum \
+            --query 'Datapoints[*].[Timestamp,Average,Maximum]' \
+            --output table 2>/dev/null || echo "No API Gateway metrics available"
+          
+          # Check Lambda metrics
+          echo "Lambda metrics (last hour):"
+          aws cloudwatch get-metric-statistics \
+            --namespace AWS/Lambda \
+            --metric-name Duration \
+            --dimensions Name=FunctionName,Value=SoundBite-${ENVIRONMENT}-Processor \
+            --start-time $(date -u -d '1 hour ago' +%Y-%m-%dT%H:%M:%S) \
+            --end-time $(date -u +%Y-%m-%dT%H:%M:%S) \
+            --period 300 \
+            --statistics Average,Maximum \
+            --query 'Datapoints[*].[Timestamp,Average,Maximum]' \
+            --output table 2>/dev/null || echo "No Lambda metrics available"
+
+  security-health-check:
+    name: Security Health Check
+    runs-on: ubuntu-latest
+    if: inputs.check_type == 'security' || inputs.check_type == 'comprehensive'
+    environment: ${{ inputs.environment }}
+    needs: basic-health-check
+    
+    steps:
+      - name: Check SSL/TLS configuration
+        run: |
+          API_ENDPOINT="${{ needs.basic-health-check.outputs.api_endpoint }}"
+          
+          echo "🔍 Checking SSL/TLS configuration for $API_ENDPOINT"
+          
+          # Extract hostname from URL
+          HOSTNAME=$(echo "$API_ENDPOINT" | sed -e 's|^[^/]*//||' -e 's|/.*$||')
+          
+          if echo "$API_ENDPOINT" | grep -q "https://"; then
+            echo "✅ Using HTTPS"
+            
+            # Check SSL certificate
+            if openssl s_client -connect "$HOSTNAME:443" -servername "$HOSTNAME" </dev/null 2>/dev/null | openssl x509 -noout -dates; then
+              echo "✅ SSL certificate is valid"
+            else
+              echo "⚠️  Could not verify SSL certificate"
+            fi
+            
+            # Check TLS version
+            TLS_VERSION=$(openssl s_client -connect "$HOSTNAME:443" -servername "$HOSTNAME" </dev/null 2>/dev/null | grep "Protocol" | head -1)
+            echo "🔒 $TLS_VERSION"
+          else
+            echo "⚠️  Not using HTTPS - this is a security concern for production"
+          fi
+
+      - name: Check security headers
+        run: |
+          API_ENDPOINT="${{ needs.basic-health-check.outputs.api_endpoint }}"
+          
+          echo "🔍 Checking security headers..."
+          
+          # Get headers from health endpoint
+          HEADERS=$(curl -s -I "$API_ENDPOINT/health" 2>/dev/null || echo "")
+          
+          if echo "$HEADERS" | grep -i "x-frame-options" >/dev/null; then
+            echo "✅ X-Frame-Options header present"
+          else
+            echo "⚠️  X-Frame-Options header missing"
+          fi
+          
+          if echo "$HEADERS" | grep -i "x-content-type-options" >/dev/null; then
+            echo "✅ X-Content-Type-Options header present"
+          else
+            echo "⚠️  X-Content-Type-Options header missing"
+          fi
+          
+          if echo "$HEADERS" | grep -i "strict-transport-security" >/dev/null; then
+            echo "✅ Strict-Transport-Security header present"
+          else
+            echo "⚠️  Strict-Transport-Security header missing"
+          fi
+          
+          if echo "$HEADERS" | grep -i "content-security-policy" >/dev/null; then
+            echo "✅ Content-Security-Policy header present"
+          else
+            echo "⚠️  Content-Security-Policy header missing"
+          fi
+
+      - name: Check for information disclosure
+        run: |
+          API_ENDPOINT="${{ needs.basic-health-check.outputs.api_endpoint }}"
+          
+          echo "🔍 Checking for information disclosure..."
+          
+          # Check if server header reveals too much information
+          SERVER_HEADER=$(curl -s -I "$API_ENDPOINT/health" 2>/dev/null | grep -i "server:" || echo "")
+          
+          if [ -n "$SERVER_HEADER" ]; then
+            echo "Server header: $SERVER_HEADER"
+            if echo "$SERVER_HEADER" | grep -i -E "(express|node|nginx/[0-9])" >/dev/null; then
+              echo "⚠️  Server header may reveal too much information"
+            else
+              echo "✅ Server header looks acceptable"
+            fi
+          else
+            echo "✅ No server header present"
+          fi
+          
+          # Check for common sensitive endpoints
+          SENSITIVE_ENDPOINTS=("/admin" "/debug" "/test" "/dev" "/.env" "/config")
+          
+          for endpoint in "${SENSITIVE_ENDPOINTS[@]}"; do
+            if curl -s -o /dev/null -w "%{http_code}" "$API_ENDPOINT$endpoint" | grep -E "^(200|301|302)$" >/dev/null; then
+              echo "⚠️  Sensitive endpoint $endpoint is accessible"
+            fi
+          done
+
+  health-summary:
+    name: Health Check Summary
+    runs-on: ubuntu-latest
+    needs: [basic-health-check, infrastructure-health-check, performance-health-check, security-health-check]
+    if: always()
+    
+    steps:
+      - name: Generate health summary
+        run: |
+          echo "# 🏥 Health Check Summary" > health-summary.md
+          echo "" >> health-summary.md
+          echo "**Environment:** ${{ inputs.environment }}" >> health-summary.md
+          echo "**Check Date:** $(date)" >> health-summary.md
+          echo "**API Endpoint:** ${{ needs.basic-health-check.outputs.api_endpoint }}" >> health-summary.md
+          echo "" >> health-summary.md
+          
+          # Check results
+          echo "## Check Results" >> health-summary.md
+          echo "" >> health-summary.md
+          
+          if [ "${{ needs.basic-health-check.result }}" = "success" ]; then
+            echo "✅ **Basic Health Check:** PASSED" >> health-summary.md
+          else
+            echo "❌ **Basic Health Check:** FAILED" >> health-summary.md
+          fi
+          
+          if [ "${{ needs.infrastructure-health-check.result }}" = "success" ]; then
+            echo "✅ **Infrastructure Health Check:** PASSED" >> health-summary.md
+          elif [ "${{ needs.infrastructure-health-check.result }}" = "skipped" ]; then
+            echo "⏭️ **Infrastructure Health Check:** SKIPPED" >> health-summary.md
+          else
+            echo "❌ **Infrastructure Health Check:** FAILED" >> health-summary.md
+          fi
+          
+          if [ "${{ needs.performance-health-check.result }}" = "success" ]; then
+            echo "✅ **Performance Health Check:** PASSED" >> health-summary.md
+          elif [ "${{ needs.performance-health-check.result }}" = "skipped" ]; then
+            echo "⏭️ **Performance Health Check:** SKIPPED" >> health-summary.md
+          else
+            echo "❌ **Performance Health Check:** FAILED" >> health-summary.md
+          fi
+          
+          if [ "${{ needs.security-health-check.result }}" = "success" ]; then
+            echo "✅ **Security Health Check:** PASSED" >> health-summary.md
+          elif [ "${{ needs.security-health-check.result }}" = "skipped" ]; then
+            echo "⏭️ **Security Health Check:** SKIPPED" >> health-summary.md
+          else
+            echo "❌ **Security Health Check:** FAILED" >> health-summary.md
+          fi
+          
+          echo "" >> health-summary.md
+          
+          # Overall status
+          if [ "${{ needs.basic-health-check.result }}" = "success" ]; then
+            echo "## Overall Status: ✅ HEALTHY" >> health-summary.md
+            echo "" >> health-summary.md
+            echo "The environment is operational and ready to serve traffic." >> health-summary.md
+          else
+            echo "## Overall Status: ❌ UNHEALTHY" >> health-summary.md
+            echo "" >> health-summary.md
+            echo "The environment has issues that need to be addressed." >> health-summary.md
+          fi
+          
+          echo "" >> health-summary.md
+          echo "## Recommendations" >> health-summary.md
+          echo "" >> health-summary.md
+          echo "1. Monitor the environment continuously" >> health-summary.md
+          echo "2. Address any failed checks immediately" >> health-summary.md
+          echo "3. Review performance metrics regularly" >> health-summary.md
+          echo "4. Ensure security best practices are followed" >> health-summary.md
+
+      - name: Upload health summary
+        uses: actions/upload-artifact@v4
+        with:
+          name: health-check-summary-${{ inputs.environment }}
+          path: health-summary.md
+
+      - name: Set workflow status
+        run: |
+          if [ "${{ needs.basic-health-check.result }}" != "success" ]; then
+            echo "❌ Health checks failed"
+            exit 1
+          else
+            echo "✅ Health checks passed"
+          fi

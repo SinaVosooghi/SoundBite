@@ -12,8 +12,10 @@
     "test:security": "jest --testPathPattern=security",
     "test:snapshots": "jest --testPathPattern=snapshots",
     "test:all": "jest --passWithNoTests",
+    "test:ci": "jest --ci --coverage --watchAll=false --passWithNoTests",
     "cdk-nag": "cdk-nag",
-    "cdk-nag:fix": "cdk-nag --fix"
+    "cdk-nag:fix": "cdk-nag --fix",
+    "cdk-nag:check": "cdk-nag --app \"npx ts-node --prefer-ts-exts bin/infra.ts\" --fail-on-error || (echo 'CDK-nag found security issues. Please review and fix.' && exit 1)"
   },
   "main": "bin/infra.ts",
   "license": "MIT",

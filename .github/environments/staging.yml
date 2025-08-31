@@ -1,0 +1,38 @@
+# Staging Environment Configuration
+name: staging
+description: "Staging environment for testing and validation"
+
+# Environment protection rules
+protection_rules:
+  required_reviewers: 1
+  prevent_self_review: true
+  dismiss_stale_reviews: true
+
+# Environment variables
+variables:
+  NODE_ENV: staging
+  AWS_REGION: us-east-1
+  LOG_LEVEL: debug
+  RATE_LIMIT_WINDOW_MS: 900000  # 15 minutes
+  RATE_LIMIT_MAX_REQUESTS: 1000
+  CORS_ORIGIN: "https://staging.soundbite.app"
+  
+# Deployment configuration
+deployment:
+  auto_deploy: true
+  branch_filter: develop
+  require_approval: false
+  
+# Monitoring configuration
+monitoring:
+  health_check_interval: "*/5 * * * *"  # Every 5 minutes
+  performance_check_interval: "0 */6 * * *"  # Every 6 hours
+  security_check_interval: "0 2 * * *"  # Daily at 2 AM
+  
+# Resource limits
+resources:
+  api_instances: 2
+  lambda_memory: 512
+  lambda_timeout: 30
+  dynamodb_read_capacity: 5
+  dynamodb_write_capacity: 5

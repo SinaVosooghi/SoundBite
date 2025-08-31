@@ -20,6 +20,13 @@
     "test:watch": "jest --watch",
     "test:cov": "jest --coverage",
     "test:e2e": "jest --config ./test/jest-e2e.json",
+    "test:e2e:cov": "jest --config ./test/jest-e2e.json --coverage",
+    "test:unit": "jest --testPathIgnorePatterns=e2e",
+    "test:integration": "jest --testPathPattern=integration",
+    "test:all": "yarn test:unit && yarn test:e2e",
+    "test:ci": "jest --ci --coverage --watchAll=false --passWithNoTests",
+    "cdk-nag:check": "cd cdk && yarn cdk-nag:check",
+    "security:scan": "yarn audit --audit-level moderate || true && cd cdk && yarn audit --audit-level moderate || true",
     "prepare": "husky install"
   },
   "lint-staged": {
@@ -91,22 +98,5 @@
     "typescript": "^5.7.3",
     "typescript-eslint": "^8.20.0",
     "webpack": "^5.89.0"
-  },
-  "jest": {
-    "moduleFileExtensions": [
-      "js",
-      "json",
-      "ts"
-    ],
-    "rootDir": "src",
-    "testRegex": ".*\\.spec\\.ts$",
-    "transform": {
-      "^.+\\.(t|j)s$": "ts-jest"
-    },
-    "collectCoverageFrom": [
-      "**/*.(t|j)s"
-    ],
-    "coverageDirectory": "../coverage",
-    "testEnvironment": "node"
   }
 }

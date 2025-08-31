@@ -1,0 +1,58 @@
+# Production Environment Configuration
+name: production
+description: "Production environment with strict controls"
+
+# Environment protection rules
+protection_rules:
+  required_reviewers: 2
+  prevent_self_review: true
+  dismiss_stale_reviews: true
+  require_code_owner_reviews: true
+  required_status_checks:
+    - "Security Scanning"
+    - "CDK Security Checks"
+    - "Performance Testing"
+
+# Environment variables
+variables:
+  NODE_ENV: production
+  AWS_REGION: us-east-1
+  LOG_LEVEL: info
+  RATE_LIMIT_WINDOW_MS: 900000  # 15 minutes
+  RATE_LIMIT_MAX_REQUESTS: 500
+  CORS_ORIGIN: "https://soundbite.app"
+  
+# Deployment configuration
+deployment:
+  auto_deploy: false
+  branch_filter: main
+  require_approval: true
+  approval_timeout_minutes: 60
+  
+# Monitoring configuration
+monitoring:
+  health_check_interval: "*/2 * * * *"  # Every 2 minutes
+  performance_check_interval: "0 */4 * * *"  # Every 4 hours
+  security_check_interval: "0 1 * * *"  # Daily at 1 AM
+  alerting_enabled: true
+  
+# Resource limits
+resources:
+  api_instances: 3
+  lambda_memory: 1024
+  lambda_timeout: 60
+  dynamodb_read_capacity: 25
+  dynamodb_write_capacity: 25
+  
+# Security configuration
+security:
+  enforce_https: true
+  require_mfa: true
+  ip_whitelist_enabled: false
+  waf_enabled: true
+  
+# Backup configuration
+backup:
+  dynamodb_backup_enabled: true
+  s3_versioning_enabled: true
+  backup_retention_days: 30

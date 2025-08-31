@@ -1,0 +1,589 @@
+name: Environment Management
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: 'Action to perform'
+        required: true
+        type: choice
+        options:
+          - create-environment
+          - update-environment
+          - destroy-environment
+          - promote-to-production
+          - rollback
+          - health-check
+      environment:
+        description: 'Target environment'
+        required: true
+        type: choice
+        options:
+          - development
+          - staging
+          - production
+          - feature-branch
+      feature_branch:
+        description: 'Feature branch name (for feature-branch environment)'
+        required: false
+        type: string
+      rollback_version:
+        description: 'Version to rollback to (for rollback action)'
+        required: false
+        type: string
+
+env:
+  NODE_VERSION: '22'
+  YARN_VERSION: '4.0.2'
+  AWS_REGION: us-east-1
+
+jobs:
+  validate-inputs:
+    name: Validate Inputs
+    runs-on: ubuntu-latest
+    outputs:
+      environment: ${{ steps.validate.outputs.environment }}
+      action: ${{ steps.validate.outputs.action }}
+      feature_branch: ${{ steps.validate.outputs.feature_branch }}
+    
+    steps:
+      - name: Validate inputs
+        id: validate
+        run: |
+          ACTION="${{ github.event.inputs.action }}"
+          ENVIRONMENT="${{ github.event.inputs.environment }}"
+          FEATURE_BRANCH="${{ github.event.inputs.feature_branch }}"
+          
+          echo "action=$ACTION" >> $GITHUB_OUTPUT
+          echo "environment=$ENVIRONMENT" >> $GITHUB_OUTPUT
+          echo "feature_branch=$FEATURE_BRANCH" >> $GITHUB_OUTPUT
+          
+          # Validate feature branch input
+          if [ "$ENVIRONMENT" = "feature-branch" ] && [ -z "$FEATURE_BRANCH" ]; then
+            echo "❌ Feature branch name is required for feature-branch environment"
+            exit 1
+          fi
+          
+          # Validate rollback version
+          if [ "$ACTION" = "rollback" ] && [ -z "${{ github.event.inputs.rollback_version }}" ]; then
+            echo "❌ Rollback version is required for rollback action"
+            exit 1
+          fi
+          
+          # Validate production actions
+          if [ "$ENVIRONMENT" = "production" ] && [ "$ACTION" = "destroy-environment" ]; then
+            echo "❌ Cannot destroy production environment via workflow"
+            exit 1
+          fi
+          
+          echo "✅ Input validation passed"
+
+  create-environment:
+    name: Create Environment
+    runs-on: ubuntu-latest
+    needs: validate-inputs
+    if: github.event.inputs.action == 'create-environment'
+    environment: ${{ needs.validate-inputs.outputs.environment }}
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'yarn'
+
+      - name: Enable Corepack
+        run: corepack enable
+        
+      - name: Setup Yarn
+        run: corepack prepare yarn@${{ env.YARN_VERSION }} --activate
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Install CDK dependencies
+        run: |
+          cd cdk
+          yarn install --immutable
+
+      - name: Run security checks
+        run: |
+          cd cdk
+          yarn cdk-nag:check
+        env:
+          CDK_DEFAULT_ACCOUNT: ${{ secrets.AWS_ACCOUNT_ID }}
+          CDK_DEFAULT_REGION: ${{ env.AWS_REGION }}
+
+      - name: Deploy infrastructure
+        run: |
+          cd cdk
+          ENVIRONMENT="${{ needs.validate-inputs.outputs.environment }}"
+          FEATURE_BRANCH="${{ needs.validate-inputs.outputs.feature_branch }}"
+          
+          if [ "$ENVIRONMENT" = "feature-branch" ]; then
+            STACK_SUFFIX="-${FEATURE_BRANCH}"
+            echo "Deploying feature branch environment: $FEATURE_BRANCH"
+          else
+            STACK_SUFFIX="-${ENVIRONMENT}"
+            echo "Deploying environment: $ENVIRONMENT"
+          fi
+          
+          npx cdk deploy --all \
+            --require-approval never \
+            --context environment="$ENVIRONMENT" \
+            --context stackSuffix="$STACK_SUFFIX"
+        env:
+          CDK_DEFAULT_ACCOUNT: ${{ secrets.AWS_ACCOUNT_ID }}
+          CDK_DEFAULT_REGION: ${{ env.AWS_REGION }}
+
+      - name: Deploy application
+        run: |
+          ENVIRONMENT="${{ needs.validate-inputs.outputs.environment }}"
+          
+          # Build and push Docker image
+          docker build -t soundbite-api:${{ github.sha }} .
+          
+          # Tag for ECR
+          ECR_REGISTRY="${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com"
+          ECR_REPOSITORY="soundbite-${ENVIRONMENT}"
+          
+          aws ecr get-login-password --region ${{ env.AWS_REGION }} | \
+            docker login --username AWS --password-stdin $ECR_REGISTRY
+          
+          docker tag soundbite-api:${{ github.sha }} $ECR_REGISTRY/$ECR_REPOSITORY:${{ github.sha }}
+          docker tag soundbite-api:${{ github.sha }} $ECR_REGISTRY/$ECR_REPOSITORY:latest
+          
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:${{ github.sha }}
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
+
+      - name: Run post-deployment health checks
+        run: |
+          ENVIRONMENT="${{ needs.validate-inputs.outputs.environment }}"
+          
+          # Get API endpoint
+          API_ENDPOINT=$(aws cloudformation describe-stacks \
+            --stack-name "SoundBite-${ENVIRONMENT}-API" \
+            --query 'Stacks[0].Outputs[?OutputKey==`ApiEndpoint`].OutputValue' \
+            --output text)
+          
+          echo "Testing API endpoint: $API_ENDPOINT"
+          
+          # Wait for deployment to be ready
+          for i in {1..30}; do
+            if curl -f "$API_ENDPOINT/health" >/dev/null 2>&1; then
+              echo "✅ Environment is healthy"
+              break
+            fi
+            echo "Waiting for environment to be ready... ($i/30)"
+            sleep 10
+          done
+          
+          # Final health check
+          curl -f "$API_ENDPOINT/health" || exit 1
+
+  update-environment:
+    name: Update Environment
+    runs-on: ubuntu-latest
+    needs: validate-inputs
+    if: github.event.inputs.action == 'update-environment'
+    environment: ${{ needs.validate-inputs.outputs.environment }}
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'yarn'
+
+      - name: Enable Corepack
+        run: corepack enable
+        
+      - name: Setup Yarn
+        run: corepack prepare yarn@${{ env.YARN_VERSION }} --activate
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Install CDK dependencies
+        run: |
+          cd cdk
+          yarn install --immutable
+
+      - name: Show infrastructure diff
+        run: |
+          cd cdk
+          ENVIRONMENT="${{ needs.validate-inputs.outputs.environment }}"
+          
+          echo "Infrastructure changes for $ENVIRONMENT:"
+          npx cdk diff --context environment="$ENVIRONMENT" || true
+
+      - name: Update infrastructure
+        run: |
+          cd cdk
+          ENVIRONMENT="${{ needs.validate-inputs.outputs.environment }}"
+          
+          npx cdk deploy --all \
+            --require-approval never \
+            --context environment="$ENVIRONMENT"
+        env:
+          CDK_DEFAULT_ACCOUNT: ${{ secrets.AWS_ACCOUNT_ID }}
+          CDK_DEFAULT_REGION: ${{ env.AWS_REGION }}
+
+      - name: Update application
+        run: |
+          ENVIRONMENT="${{ needs.validate-inputs.outputs.environment }}"
+          
+          # Build and push new Docker image
+          docker build -t soundbite-api:${{ github.sha }} .
+          
+          ECR_REGISTRY="${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com"
+          ECR_REPOSITORY="soundbite-${ENVIRONMENT}"
+          
+          aws ecr get-login-password --region ${{ env.AWS_REGION }} | \
+            docker login --username AWS --password-stdin $ECR_REGISTRY
+          
+          docker tag soundbite-api:${{ github.sha }} $ECR_REGISTRY/$ECR_REPOSITORY:${{ github.sha }}
+          docker tag soundbite-api:${{ github.sha }} $ECR_REGISTRY/$ECR_REPOSITORY:latest
+          
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:${{ github.sha }}
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
+          
+          # Update ECS service or EC2 instances
+          echo "Updating application deployment..."
+
+  destroy-environment:
+    name: Destroy Environment
+    runs-on: ubuntu-latest
+    needs: validate-inputs
+    if: github.event.inputs.action == 'destroy-environment'
+    environment: ${{ needs.validate-inputs.outputs.environment }}
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'yarn'
+
+      - name: Enable Corepack
+        run: corepack enable
+        
+      - name: Setup Yarn
+        run: corepack prepare yarn@${{ env.YARN_VERSION }} --activate
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Install CDK dependencies
+        run: |
+          cd cdk
+          yarn install --immutable
+
+      - name: Confirm destruction
+        run: |
+          ENVIRONMENT="${{ needs.validate-inputs.outputs.environment }}"
+          echo "⚠️  WARNING: About to destroy environment: $ENVIRONMENT"
+          echo "This action cannot be undone!"
+          
+          if [ "$ENVIRONMENT" = "production" ]; then
+            echo "❌ Cannot destroy production environment"
+            exit 1
+          fi
+
+      - name: Destroy infrastructure
+        run: |
+          cd cdk
+          ENVIRONMENT="${{ needs.validate-inputs.outputs.environment }}"
+          FEATURE_BRANCH="${{ needs.validate-inputs.outputs.feature_branch }}"
+          
+          if [ "$ENVIRONMENT" = "feature-branch" ]; then
+            STACK_SUFFIX="-${FEATURE_BRANCH}"
+          else
+            STACK_SUFFIX="-${ENVIRONMENT}"
+          fi
+          
+          npx cdk destroy --all \
+            --force \
+            --context environment="$ENVIRONMENT" \
+            --context stackSuffix="$STACK_SUFFIX"
+        env:
+          CDK_DEFAULT_ACCOUNT: ${{ secrets.AWS_ACCOUNT_ID }}
+          CDK_DEFAULT_REGION: ${{ env.AWS_REGION }}
+
+  promote-to-production:
+    name: Promote to Production
+    runs-on: ubuntu-latest
+    needs: validate-inputs
+    if: github.event.inputs.action == 'promote-to-production'
+    environment: production
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Validate staging environment
+        run: |
+          echo "Validating staging environment before promotion..."
+          
+          # Get staging API endpoint
+          STAGING_API=$(aws cloudformation describe-stacks \
+            --stack-name "SoundBite-staging-API" \
+            --query 'Stacks[0].Outputs[?OutputKey==`ApiEndpoint`].OutputValue' \
+            --output text)
+          
+          # Run health checks
+          curl -f "$STAGING_API/health" || exit 1
+          
+          echo "✅ Staging environment validation passed"
+
+      - name: Run production deployment
+        uses: ./.github/workflows/ci.yml
+        with:
+          environment: production
+          skip_tests: true
+
+      - name: Verify production deployment
+        run: |
+          echo "Verifying production deployment..."
+          
+          # Get production API endpoint
+          PROD_API=$(aws cloudformation describe-stacks \
+            --stack-name "SoundBite-production-API" \
+            --query 'Stacks[0].Outputs[?OutputKey==`ApiEndpoint`].OutputValue' \
+            --output text)
+          
+          # Wait for deployment
+          for i in {1..30}; do
+            if curl -f "$PROD_API/health" >/dev/null 2>&1; then
+              echo "✅ Production deployment verified"
+              break
+            fi
+            echo "Waiting for production to be ready... ($i/30)"
+            sleep 10
+          done
+          
+          # Final verification
+          curl -f "$PROD_API/health" || exit 1
+
+  rollback:
+    name: Rollback Environment
+    runs-on: ubuntu-latest
+    needs: validate-inputs
+    if: github.event.inputs.action == 'rollback'
+    environment: ${{ needs.validate-inputs.outputs.environment }}
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.rollback_version }}
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Rollback application
+        run: |
+          ENVIRONMENT="${{ needs.validate-inputs.outputs.environment }}"
+          ROLLBACK_VERSION="${{ github.event.inputs.rollback_version }}"
+          
+          echo "Rolling back $ENVIRONMENT to version $ROLLBACK_VERSION"
+          
+          ECR_REGISTRY="${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com"
+          ECR_REPOSITORY="soundbite-${ENVIRONMENT}"
+          
+          # Check if the rollback version exists
+          if aws ecr describe-images \
+            --repository-name "$ECR_REPOSITORY" \
+            --image-ids imageTag="$ROLLBACK_VERSION" >/dev/null 2>&1; then
+            
+            echo "✅ Rollback version found in ECR"
+            
+            # Tag the rollback version as latest
+            MANIFEST=$(aws ecr batch-get-image \
+              --repository-name "$ECR_REPOSITORY" \
+              --image-ids imageTag="$ROLLBACK_VERSION" \
+              --query 'images[0].imageManifest' \
+              --output text)
+            
+            aws ecr put-image \
+              --repository-name "$ECR_REPOSITORY" \
+              --image-tag latest \
+              --image-manifest "$MANIFEST"
+            
+            echo "✅ Rollback completed"
+          else
+            echo "❌ Rollback version not found in ECR"
+            exit 1
+          fi
+
+      - name: Verify rollback
+        run: |
+          ENVIRONMENT="${{ needs.validate-inputs.outputs.environment }}"
+          
+          # Get API endpoint
+          API_ENDPOINT=$(aws cloudformation describe-stacks \
+            --stack-name "SoundBite-${ENVIRONMENT}-API" \
+            --query 'Stacks[0].Outputs[?OutputKey==`ApiEndpoint`].OutputValue' \
+            --output text)
+          
+          # Wait for rollback to take effect
+          for i in {1..30}; do
+            if curl -f "$API_ENDPOINT/health" >/dev/null 2>&1; then
+              echo "✅ Rollback verification passed"
+              break
+            fi
+            echo "Waiting for rollback to take effect... ($i/30)"
+            sleep 10
+          done
+          
+          # Final health check
+          curl -f "$API_ENDPOINT/health" || exit 1
+
+  health-check:
+    name: Environment Health Check
+    runs-on: ubuntu-latest
+    needs: validate-inputs
+    if: github.event.inputs.action == 'health-check'
+    
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Run comprehensive health check
+        run: |
+          ENVIRONMENT="${{ needs.validate-inputs.outputs.environment }}"
+          
+          echo "Running health check for environment: $ENVIRONMENT"
+          
+          # Check API health
+          API_ENDPOINT=$(aws cloudformation describe-stacks \
+            --stack-name "SoundBite-${ENVIRONMENT}-API" \
+            --query 'Stacks[0].Outputs[?OutputKey==`ApiEndpoint`].OutputValue' \
+            --output text)
+          
+          if curl -f "$API_ENDPOINT/health" >/dev/null 2>&1; then
+            echo "✅ API is healthy"
+          else
+            echo "❌ API health check failed"
+            exit 1
+          fi
+          
+          # Check DynamoDB
+          TABLE_NAME="SoundBite-${ENVIRONMENT}-SoundbitesTable"
+          TABLE_STATUS=$(aws dynamodb describe-table \
+            --table-name "$TABLE_NAME" \
+            --query 'Table.TableStatus' \
+            --output text)
+          
+          if [ "$TABLE_STATUS" = "ACTIVE" ]; then
+            echo "✅ DynamoDB table is active"
+          else
+            echo "❌ DynamoDB table status: $TABLE_STATUS"
+            exit 1
+          fi
+          
+          # Check S3 bucket
+          BUCKET_NAME="soundbite-${ENVIRONMENT}-soundbites"
+          if aws s3 ls "s3://$BUCKET_NAME" >/dev/null 2>&1; then
+            echo "✅ S3 bucket is accessible"
+          else
+            echo "❌ S3 bucket is not accessible"
+            exit 1
+          fi
+          
+          # Check SQS queue
+          QUEUE_URL=$(aws sqs get-queue-url \
+            --queue-name "SoundBite-${ENVIRONMENT}-Queue" \
+            --query 'QueueUrl' \
+            --output text)
+          
+          if [ -n "$QUEUE_URL" ]; then
+            echo "✅ SQS queue is accessible"
+          else
+            echo "❌ SQS queue not found"
+            exit 1
+          fi
+          
+          echo "✅ All health checks passed for $ENVIRONMENT"
+
+  notify-completion:
+    name: Notify Completion
+    runs-on: ubuntu-latest
+    needs: [validate-inputs, create-environment, update-environment, destroy-environment, promote-to-production, rollback, health-check]
+    if: always()
+    
+    steps:
+      - name: Send notification
+        run: |
+          ACTION="${{ github.event.inputs.action }}"
+          ENVIRONMENT="${{ needs.validate-inputs.outputs.environment }}"
+          
+          # Determine overall status
+          if [ "${{ needs.create-environment.result }}" = "success" ] || \
+             [ "${{ needs.update-environment.result }}" = "success" ] || \
+             [ "${{ needs.destroy-environment.result }}" = "success" ] || \
+             [ "${{ needs.promote-to-production.result }}" = "success" ] || \
+             [ "${{ needs.rollback.result }}" = "success" ] || \
+             [ "${{ needs.health-check.result }}" = "success" ]; then
+            STATUS="✅ SUCCESS"
+            COLOR="good"
+          else
+            STATUS="❌ FAILED"
+            COLOR="danger"
+          fi
+          
+          echo "$STATUS: $ACTION completed for $ENVIRONMENT"
+          
+          # Send Slack notification if webhook is configured
+          if [ -n "${{ secrets.SLACK_WEBHOOK_URL }}" ]; then
+            curl -X POST -H 'Content-type: application/json' \
+              --data "{
+                \"text\": \"Environment Management: $ACTION\",
+                \"attachments\": [{
+                  \"color\": \"$COLOR\",
+                  \"fields\": [
+                    {\"title\": \"Action\", \"value\": \"$ACTION\", \"short\": true},
+                    {\"title\": \"Environment\", \"value\": \"$ENVIRONMENT\", \"short\": true},
+                    {\"title\": \"Status\", \"value\": \"$STATUS\", \"short\": true},
+                    {\"title\": \"Workflow\", \"value\": \"<${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|View Details>\", \"short\": false}
+                  ]
+                }]
+              }" \
+              ${{ secrets.SLACK_WEBHOOK_URL }}
+          fi

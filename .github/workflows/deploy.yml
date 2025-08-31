@@ -1,5 +1,9 @@
 name: Deploy SoundBite Infrastructure
 
+concurrency:
+  group: deploy-${{ github.event.inputs.environment || 'staging' }}
+  cancel-in-progress: false
+
 on:
   push:
     branches: [ main, develop ]
@@ -64,10 +68,16 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'yarn'
 
+      - name: Enable Corepack
+        run: corepack enable
+        
+      - name: Setup Yarn
+        run: corepack prepare yarn@4.0.2 --activate
+        
       - name: Install dependencies
         run: |
           cd cdk
-          yarn install --frozen-lockfile
+          yarn install --immutable
 
       - name: Lint TypeScript
         run: |
@@ -99,15 +109,42 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'yarn'
 
+      - name: Enable Corepack
+        run: corepack enable
+        
+      - name: Setup Yarn
+        run: corepack prepare yarn@4.0.2 --activate
+        
       - name: Install dependencies
         run: |
           cd cdk
-          yarn install --frozen-lockfile
+          yarn install --immutable
 
       - name: Run CDK security checks
         run: |
           cd cdk
           npx cdk diff --security-only
+
+      - name: Run CDK-nag security checks
+        run: |
+          cd cdk
+          npx cdk synth --app "npx ts-node --prefer-ts-exts bin/infra.ts" --context enableCdkNag=true
+        env:
+          CDK_DEFAULT_ACCOUNT: ${{ secrets.AWS_ACCOUNT_ID }}
+          CDK_DEFAULT_REGION: ${{ env.AWS_REGION }}
+      
+      - name: Fail on CDK-nag violations
+        run: |
+          cd cdk
+          if npx cdk-nag --app "npx ts-node --prefer-ts-exts bin/infra.ts" --fail-on-error; then
+            echo "✅ CDK-nag checks passed"
+          else
+            echo "❌ CDK-nag checks failed"
+            exit 1
+          fi
+        env:
+          CDK_DEFAULT_ACCOUNT: ${{ secrets.AWS_ACCOUNT_ID }}
+          CDK_DEFAULT_REGION: ${{ env.AWS_REGION }}
 
       - name: Check for security vulnerabilities
         run: |
@@ -138,10 +175,16 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
 
+      - name: Enable Corepack
+        run: corepack enable
+        
+      - name: Setup Yarn
+        run: corepack prepare yarn@4.0.2 --activate
+        
       - name: Install dependencies
         run: |
           cd cdk
-          yarn install --frozen-lockfile
+          yarn install --immutable
 
       - name: Bootstrap CDK (if needed)
         run: |
@@ -193,10 +236,16 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
 
+      - name: Enable Corepack
+        run: corepack enable
+        
+      - name: Setup Yarn
+        run: corepack prepare yarn@4.0.2 --activate
+        
       - name: Install dependencies
         run: |
           cd cdk
-          yarn install --frozen-lockfile
+          yarn install --immutable
 
       - name: Bootstrap CDK (if needed)
         run: |
@@ -247,10 +296,16 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
 
+      - name: Enable Corepack
+        run: corepack enable
+        
+      - name: Setup Yarn
+        run: corepack prepare yarn@4.0.2 --activate
+        
       - name: Install dependencies
         run: |
           cd cdk
-          yarn install --frozen-lockfile
+          yarn install --immutable
 
       - name: Destroy infrastructure
         run: |
@@ -283,10 +338,16 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
 
+      - name: Enable Corepack
+        run: corepack enable
+        
+      - name: Setup Yarn
+        run: corepack prepare yarn@4.0.2 --activate
+        
       - name: Install dependencies
         run: |
           cd cdk
-          yarn install --frozen-lockfile
+          yarn install --immutable
 
       - name: Show CDK diff
         run: |
