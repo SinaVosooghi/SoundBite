@@ -1,21 +1,20 @@
-import { SQSHandler } from 'aws-lambda';
+import type { SQSHandler } from 'aws-lambda';
 import {
   PollyClient,
   SynthesizeSpeechCommand,
   VoiceId,
+  type SynthesizeSpeechCommandOutput,
 } from '@aws-sdk/client-polly';
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
-import {
-  DynamoDBClient,
-  PutItemCommand,
-  PutItemInput,
-} from '@aws-sdk/client-dynamodb';
+import type { PutItemInput } from '@aws-sdk/client-dynamodb';
+import { DynamoDBClient, PutItemCommand } from '@aws-sdk/client-dynamodb';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
-import { Readable } from 'stream';
+
+import { LambdaLogger } from './logger';
 
 const localOptions = {
   endpoint: 'http://localhost:4566',
-  region: process.env.AWS_REGION || 'us-east-1',
+  region: process.env.AWS_REGION ?? 'us-east-1',
   credentials: { accessKeyId: 'test', secretAccessKey: 'test' },
   forcePathStyle: true,
 };
@@ -25,14 +24,18 @@ const polly = isLocal ? null : new PollyClient(localOptions);
 const s3 = new S3Client(localOptions);
 const dynamo = new DynamoDBClient(localOptions);
 
-const BUCKET_NAME = process.env.BUCKET_NAME!;
-const TABLE_NAME = process.env.TABLE_NAME!;
+const BUCKET_NAME = process.env.BUCKET_NAME ?? 'default-bucket';
+const TABLE_NAME = process.env.TABLE_NAME ?? 'default-table';
+
+const logger = new LambdaLogger('SoundBiteProcessor');
 
 // Mock Polly service for local development
 function mockPollySynthesize(text: string, voiceId: string): Promise<Buffer> {
-  console.log(
-    `[MOCK] Synthesizing speech for text: "${text}" with voice: ${voiceId}`,
-  );
+  logger.info('Mock synthesis started', {
+    text: text.substring(0, 50) + (text.length > 50 ? '...' : ''),
+    voiceId,
+    textLength: text.length,
+  });
   // Generate a dummy MP3 buffer (1 second of silence)
   const dummyMp3 = Buffer.from([
     0xff, 0xfb, 0x90, 0x64, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
@@ -43,14 +46,16 @@ function mockPollySynthesize(text: string, voiceId: string): Promise<Buffer> {
 }
 
 export const handler: SQSHandler = async (event) => {
-  console.log(`Processing ${event.Records.length} SQS message(s)`);
+  logger.info('SQS batch processing started', {
+    messageCount: event.Records.length,
+  });
 
   for (const record of event.Records) {
     const startTime = Date.now();
     const messageId = record.messageId;
 
     try {
-      console.log(`Processing message: ${messageId}`);
+      logger.info('Message processing started', { messageId });
 
       const body = JSON.parse(record.body) as {
         id: string;
@@ -63,16 +68,16 @@ export const handler: SQSHandler = async (event) => {
       // 1. Synthesize speech (mock for local, real for production)
       let audio: Buffer = Buffer.from([]);
       if (isLocal) {
-        audio = await mockPollySynthesize(text, voiceId || VoiceId.Joanna);
+        audio = await mockPollySynthesize(text, voiceId ?? VoiceId.Joanna);
       } else {
         const synthesizeSpeechCommand = new SynthesizeSpeechCommand({
           OutputFormat: 'mp3',
           Text: text,
-          VoiceId: (voiceId || VoiceId.Joanna) as VoiceId,
+          VoiceId: (voiceId ?? VoiceId.Joanna) as VoiceId,
         });
-        const synthRes = await polly!.send(synthesizeSpeechCommand);
+        const synthRes = await polly?.send(synthesizeSpeechCommand);
 
-        if (!synthRes.AudioStream) {
+        if (synthRes?.AudioStream) {
           audio = await streamToBuffer(synthRes.AudioStream);
         }
       }
@@ -87,7 +92,7 @@ export const handler: SQSHandler = async (event) => {
           ContentType: 'audio/mpeg',
           Metadata: {
             'soundbite-id': id,
-            'voice-id': voiceId || 'Joanna',
+            'voice-id': voiceId ?? 'Joanna',
             'text-length': text.length.toString(),
           },
         }),
@@ -118,8 +123,12 @@ export const handler: SQSHandler = async (event) => {
         ttl: { N: ttl.toString() }, // TTL for automatic cleanup
       };
 
-      if (voiceId) item.voiceId = { S: voiceId };
-      if (userId) item.userId = { S: userId };
+      if (voiceId !== undefined && voiceId !== null && voiceId.length > 0) {
+        item.voiceId = { S: voiceId };
+      }
+      if (userId !== undefined && userId !== null && userId.length > 0) {
+        item.userId = { S: userId };
+      }
 
       await dynamo.send(
         new PutItemCommand({
@@ -129,20 +138,22 @@ export const handler: SQSHandler = async (event) => {
       );
 
       const processingTime = Date.now() - startTime;
-      console.log(
-        `Successfully processed soundbite ${id} in ${processingTime}ms`,
-      );
+      logger.info('Soundbite processing completed', {
+        soundbiteId: id,
+        messageId,
+        processingTime,
+        textLength: text.length,
+        voiceId,
+      });
     } catch (error) {
       const processingTime = Date.now() - startTime;
-      console.error(
-        `Error processing message ${messageId} after ${processingTime}ms:`,
-        {
-          error: error instanceof Error ? error.message : String(error),
-          stack: error instanceof Error ? error.stack : undefined,
-          messageId,
-          recordBody: record.body,
-        },
-      );
+      logger.error('Message processing failed', {
+        messageId,
+        processingTime,
+        error: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined,
+        recordBody: record.body,
+      });
 
       // Let Lambda retry, or send to DLQ
       throw error;
@@ -150,20 +161,62 @@ export const handler: SQSHandler = async (event) => {
   }
 };
 
-function streamToBuffer(stream: Readable | undefined): Promise<Buffer> {
+function streamToBuffer(
+  stream: SynthesizeSpeechCommandOutput['AudioStream'],
+): Promise<Buffer> {
   if (!stream) {
     throw new Error('Audio stream is undefined');
   }
 
-  if (stream instanceof Blob) {
-    return stream.arrayBuffer().then((buffer) => Buffer.from(buffer));
-  } else {
-    // Handle Readable stream
-    return new Promise<Buffer>((resolve, reject) => {
+  return new Promise<Buffer>((resolve, reject) => {
+    // Handle Blob type (has arrayBuffer method)
+    if ('arrayBuffer' in stream && typeof stream.arrayBuffer === 'function') {
+      stream
+        .arrayBuffer()
+        .then((buffer: ArrayBuffer) => resolve(Buffer.from(buffer)))
+        .catch(reject);
+      return;
+    }
+
+    // Handle Node.js Readable stream (has on method)
+    if ('on' in stream && typeof stream.on === 'function') {
       const chunks: Buffer[] = [];
       stream.on('data', (chunk: Buffer) => chunks.push(chunk));
       stream.on('end', () => resolve(Buffer.concat(chunks)));
       stream.on('error', reject);
-    });
-  }
+      return;
+    }
+
+    // Handle ReadableStream (Web API)
+    if ('getReader' in stream && typeof stream.getReader === 'function') {
+      const reader = stream.getReader();
+      const chunks: Uint8Array[] = [];
+
+      const pump = (): Promise<void> => {
+        return reader.read().then(({ done, value }) => {
+          if (done) {
+            const totalLength = chunks.reduce(
+              (acc, chunk) => acc + chunk.length,
+              0,
+            );
+            const result = new Uint8Array(totalLength);
+            let offset = 0;
+            for (const chunk of chunks) {
+              result.set(chunk, offset);
+              offset += chunk.length;
+            }
+            resolve(Buffer.from(result));
+            return;
+          }
+          chunks.push(value as Uint8Array);
+          return pump();
+        });
+      };
+
+      pump().catch(reject);
+      return;
+    }
+
+    reject(new Error('Unsupported stream type'));
+  });
 }

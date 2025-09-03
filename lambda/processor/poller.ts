@@ -6,6 +6,7 @@ import {
   DeleteMessageCommand,
 } from '@aws-sdk/client-sqs';
 import { handler } from './index';
+import { LambdaLogger } from './logger';
 import type {
   SQSEvent,
   SQSRecord,
@@ -18,24 +19,25 @@ import type {
 // Configure SQS client for LocalStack
 const sqs = new SQSClient({
   endpoint: 'http://localhost:4566',
-  region: process.env.AWS_REGION || 'us-east-1',
+  region: process.env.AWS_REGION ?? 'us-east-1',
   credentials: {
     accessKeyId: 'test',
     secretAccessKey: 'test',
   },
 });
 
-const queueUrl = process.env.SQS_QUEUE_URL!;
+const logger = new LambdaLogger('SQSPoller');
+const queueUrl = process.env.SQS_QUEUE_URL;
 
-if (!queueUrl) {
-  console.error('[ERROR] SQS_QUEUE_URL environment variable is required');
+if (queueUrl === undefined || queueUrl === null || queueUrl.length === 0) {
+  logger.error('SQS_QUEUE_URL environment variable is required');
   process.exit(1);
 }
 
-console.log(`[INFO] Starting SQS poller for queue: ${queueUrl}`);
-console.log('[INFO] Press Ctrl+C to stop');
+logger.info('SQS poller starting', { queueUrl });
+logger.info('Press Ctrl+C to stop polling');
 
-async function poll() {
+async function poll(): Promise<void> {
   while (true) {
     try {
       // Receive messages from SQS
@@ -48,28 +50,28 @@ async function poll() {
         }),
       );
 
-      if (Messages && Messages.length > 0) {
+      if (Messages !== undefined && Messages !== null && Messages.length > 0) {
         for (const msg of Messages) {
           try {
-            console.log(`[INFO] Processing message: ${msg.MessageId}`);
+            logger.info('Processing message', { messageId: msg.MessageId });
 
             // Process the message using the Lambda handler
             const mockEvent: SQSEvent = {
               Records: [
                 {
-                  messageId: msg.MessageId!,
-                  receiptHandle: msg.ReceiptHandle!,
-                  body: msg.Body!,
-                  attributes: (msg.Attributes || {}) as SQSRecordAttributes,
-                  messageAttributes: (msg.MessageAttributes ||
+                  messageId: msg.MessageId ?? '',
+                  receiptHandle: msg.ReceiptHandle ?? '',
+                  body: msg.Body ?? '',
+                  attributes: (msg.Attributes ?? {}) as SQSRecordAttributes,
+                  messageAttributes: (msg.MessageAttributes ??
                     {}) as unknown as SQSMessageAttributes,
-                  md5OfBody: msg.MD5OfBody!,
+                  md5OfBody: msg.MD5OfBody ?? '',
                   eventSource: 'aws:sqs',
                   eventSourceARN:
                     'arn:aws:sqs:us-east-1:000000000000:SoundbiteQueue',
                   awsRegion: 'us-east-1',
                 } satisfies Omit<SQSRecord, 'messageAttributes'> & {
-                  messageAttributes: Record<string, any>;
+                  messageAttributes: Record<string, unknown>;
                 },
               ],
             };
@@ -83,24 +85,26 @@ async function poll() {
             await sqs.send(
               new DeleteMessageCommand({
                 QueueUrl: queueUrl,
-                ReceiptHandle: msg.ReceiptHandle!,
+                ReceiptHandle: msg.ReceiptHandle ?? '',
               }),
             );
 
-            console.log(
-              `[SUCCESS] Message ${msg.MessageId} processed and deleted`,
-            );
+            logger.info('Message processed and deleted', {
+              messageId: msg.MessageId,
+            });
           } catch (error) {
-            console.error(
-              `[ERROR] Failed to process message ${msg.MessageId}:`,
-              error,
-            );
+            logger.error('Failed to process message', {
+              messageId: msg.MessageId,
+              error: error instanceof Error ? error.message : String(error),
+            });
             // Don't delete the message - let it go to DLQ or retry
           }
         }
       }
     } catch (error) {
-      console.error('[ERROR] Polling error:', error);
+      logger.error('Polling error occurred', {
+        error: error instanceof Error ? error.message : String(error),
+      });
       // Wait before retrying
       await new Promise((resolve) => setTimeout(resolve, 5000));
     }
@@ -109,7 +113,7 @@ async function poll() {
 
 // Handle graceful shutdown
 process.on('SIGINT', () => {
-  console.log('\n[INFO] Shutting down SQS poller...');
+  logger.info('Shutting down SQS poller...');
   process.exit(0);
 });
 
