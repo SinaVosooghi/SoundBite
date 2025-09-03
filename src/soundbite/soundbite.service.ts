@@ -1,8 +1,8 @@
 import { Injectable, Logger } from '@nestjs/common';
 import {
   SoundbiteNotFoundException,
-  AwsServiceException,
-  ProcessingException,
+  // AwsServiceException,
+  // ProcessingException,
 } from '../exceptions/soundbite.exceptions';
 import { ValidationService } from '../services/validation.service';
 import { ConfigService } from '@nestjs/config';

@@ -60,7 +60,7 @@ export class SecurityMiddleware implements NestMiddleware {
       'development',
     ) as EnvironmentName;
     const envConfig =
-      ENVIRONMENT_SECURITY[environment] || ENVIRONMENT_SECURITY.development;
+      ENVIRONMENT_SECURITY[environment] ?? ENVIRONMENT_SECURITY.development;
     const isDevelopment = environment === 'development';
     const isProduction = environment === 'production';
 
