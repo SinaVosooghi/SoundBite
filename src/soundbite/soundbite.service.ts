@@ -4,7 +4,7 @@ import {
   AwsServiceException,
   ProcessingException,
 } from '../exceptions/soundbite.exceptions';
-import { SoundbiteValidator } from '../validators/soundbite.validator';
+import { ValidationService } from '../services/validation.service';
 import { ConfigService } from '@nestjs/config';
 import { SQSClient, SendMessageCommand } from '@aws-sdk/client-sqs';
 import {
@@ -15,6 +15,8 @@ import {
 import { v4 as uuidv4 } from 'uuid';
 import { getEnvironmentConfig, isLocalStack } from '../config';
 import { AWSConfig } from 'src/types/aws';
+import { SOUNDBITE_CONSTANTS, SoundbiteStatus } from '../constants/soundbite';
+import { ErrorHandler } from '../utils/error-handler';
 
 @Injectable()
 export class SoundbiteService {
@@ -25,7 +27,7 @@ export class SoundbiteService {
 
   constructor(
     private readonly configService: ConfigService,
-    private readonly validator: SoundbiteValidator,
+    private readonly validationService: ValidationService,
   ) {
     // Use environment-aware configuration
     const awsConfig: AWSConfig = {
@@ -75,14 +77,19 @@ export class SoundbiteService {
     id: string;
     text: string;
     voiceId: string;
-    status: 'pending';
+    status: SoundbiteStatus;
     createdAt: string;
     updatedAt: string;
     environment: string;
     idempotencyKey?: string;
   }> {
     // Input validation
-    this.validator.validateSoundbiteInput(text, voiceId);
+    this.validationService.validateCreateSoundbiteRequest(
+      text,
+      voiceId,
+      userId,
+      idempotencyKey,
+    );
 
     const id = uuidv4();
 
@@ -97,7 +104,7 @@ export class SoundbiteService {
       const message = {
         id,
         text,
-        voiceId: voiceId ?? 'Joanna',
+        voiceId: voiceId ?? SOUNDBITE_CONSTANTS.DEFAULT_VOICE_ID,
         userId,
         createdAt: now,
         environment: this.envConfig.name, // Add environment info to message
@@ -110,11 +117,11 @@ export class SoundbiteService {
 
         Item: {
           pk: { S: `${this.envConfig.name}:${id}` },
-          sk: { S: `SOUNDBITE#${id}` },
+          sk: { S: `${SOUNDBITE_CONSTANTS.DYNAMODB.SK_PREFIX}${id}` },
           text: { S: text },
-          voiceId: { S: voiceId ?? 'Joanna' },
-          userId: { S: userId ?? 'anonymous' },
-          status: { S: 'pending' },
+          voiceId: { S: voiceId ?? SOUNDBITE_CONSTANTS.DEFAULT_VOICE_ID },
+          userId: { S: userId ?? SOUNDBITE_CONSTANTS.DEFAULTS.USER_ID },
+          status: { S: SOUNDBITE_CONSTANTS.STATUS.PENDING },
           createdAt: { S: now },
           updatedAt: { S: now },
           environment: { S: this.envConfig.name },
@@ -133,9 +140,8 @@ export class SoundbiteService {
         MessageBody: JSON.stringify(message),
 
         MessageAttributes: {
-          Environment: {
+          [SOUNDBITE_CONSTANTS.SQS.ENVIRONMENT_ATTRIBUTE]: {
             DataType: 'String',
-
             StringValue: this.envConfig.name,
           },
         },
@@ -149,50 +155,28 @@ export class SoundbiteService {
       return {
         id,
         text,
-        voiceId: voiceId ?? 'Joanna',
-        status: 'pending' as const,
+        voiceId: voiceId ?? SOUNDBITE_CONSTANTS.DEFAULT_VOICE_ID,
+        status: SOUNDBITE_CONSTANTS.STATUS.PENDING as SoundbiteStatus,
         createdAt: now,
         updatedAt: now,
         environment: this.envConfig.name,
       };
     } catch (error: unknown) {
       if (error instanceof Error) {
-        // Log error message and stack trace for debugging
-        this.logger.error(
-          `Failed to create soundbite: ${error.message}`,
-          error.stack ?? 'No stack trace available',
-        );
+        ErrorHandler.logError(this.logger, error, 'soundbite creation', id, {
+          environment: this.envConfig.name,
+        });
 
-        // Determine if this is an AWS service error
-        if (
-          (error.name?.length ?? 0) > 0 &&
-          (error.name.includes('AWS') ||
-            error.name.includes('DynamoDB') ||
-            error.name.includes('SQS'))
-        ) {
-          throw new AwsServiceException(
-            error.name.includes('DynamoDB') ? 'DynamoDB' : 'SQS',
-            error.name.includes('DynamoDB') ? 'PutItem' : 'SendMessage',
-            error,
-            { soundbiteId: id, environment: this.envConfig.name },
-          );
-        }
-
-        throw new ProcessingException('creation', error.message, id, {
+        throw ErrorHandler.createException(error, 'creation', id, {
           environment: this.envConfig.name,
         });
       } else {
-        // Log unexpected error type, if not an instance of Error
-        this.logger.error(
-          'Failed to create soundbite job: Unknown error type',
+        throw ErrorHandler.handleUnknownError(
+          this.logger,
           error,
-        );
-
-        throw new ProcessingException(
           'creation',
-          'Unknown error occurred during soundbite creation',
           id,
-          { environment: this.envConfig.name, error },
+          { environment: this.envConfig.name },
         );
       }
     }
@@ -204,7 +188,7 @@ export class SoundbiteService {
     voiceId: string;
     s3Key?: string;
     url?: string;
-    status: 'pending' | 'processing' | 'ready' | 'failed';
+    status: SoundbiteStatus;
     createdAt: string;
     updatedAt: string;
     environment: string;
@@ -219,7 +203,7 @@ export class SoundbiteService {
 
         Key: {
           pk: { S: `${this.envConfig.name}:${id}` },
-          sk: { S: `SOUNDBITE#${id}` },
+          sk: { S: `${SOUNDBITE_CONSTANTS.DYNAMODB.SK_PREFIX}${id}` },
         },
       });
 
@@ -235,17 +219,18 @@ export class SoundbiteService {
       }
 
       const soundbite = {
-        id: result.Item.sk.S?.replace('SOUNDBITE#', '') ?? '',
+        id:
+          result.Item.sk.S?.replace(
+            SOUNDBITE_CONSTANTS.DYNAMODB.SK_PREFIX,
+            '',
+          ) ?? '',
         text: result.Item.text.S ?? '',
         voiceId: result.Item.voiceId?.S ?? '',
         s3Key: result.Item.s3Key?.S,
         url: result.Item.url?.S,
         status:
-          (result.Item.status.S as
-            | 'pending'
-            | 'processing'
-            | 'ready'
-            | 'failed') ?? 'pending',
+          (result.Item.status.S as SoundbiteStatus) ??
+          SOUNDBITE_CONSTANTS.STATUS.PENDING,
         createdAt: result.Item.createdAt.S ?? '',
         updatedAt: result.Item.updatedAt.S ?? '',
         environment: this.envConfig.name,
@@ -259,36 +244,20 @@ export class SoundbiteService {
       if (error instanceof SoundbiteNotFoundException) {
         throw error;
       } else if (error instanceof Error) {
-        this.logger.error(
-          `Failed to fetch soundbite ${id}: ${error.message}`,
-          error.stack,
-        );
+        ErrorHandler.logError(this.logger, error, 'soundbite retrieval', id, {
+          environment: this.envConfig.name,
+        });
 
-        // Check if it's an AWS service error
-        if (
-          (error.name?.length ?? 0) > 0 &&
-          (error.name.includes('AWS') || error.name.includes('DynamoDB'))
-        ) {
-          throw new AwsServiceException('DynamoDB', 'GetItem', error, {
-            soundbiteId: id,
-            environment: this.envConfig.name,
-          });
-        }
-
-        throw new ProcessingException('retrieval', error.message, id, {
+        throw ErrorHandler.createException(error, 'retrieval', id, {
           environment: this.envConfig.name,
         });
       } else {
-        this.logger.error(
-          'Failed to fetch soundbite: Unknown error type',
+        throw ErrorHandler.handleUnknownError(
+          this.logger,
           error,
-        );
-
-        throw new ProcessingException(
           'retrieval',
-          'Unknown error occurred during soundbite retrieval',
           id,
-          { environment: this.envConfig.name, error },
+          { environment: this.envConfig.name },
         );
       }
     }

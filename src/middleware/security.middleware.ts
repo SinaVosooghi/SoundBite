@@ -6,6 +6,11 @@ import type { RateLimitRequestHandler } from 'express-rate-limit';
 import rateLimit from 'express-rate-limit';
 import type { ConfigService } from '@nestjs/config';
 import { randomBytes } from 'crypto';
+import {
+  SECURITY_CONSTANTS,
+  ENVIRONMENT_SECURITY,
+  EnvironmentName,
+} from '../constants/security';
 
 export interface SecurityRequest extends Request {
   nonce?: string;
@@ -18,9 +23,14 @@ export class SecurityMiddleware implements NestMiddleware {
   constructor(private configService: ConfigService) {
     // Configure rate limiting
     this.rateLimiter = rateLimit({
-      windowMs:
-        this.configService.get('production.security.rateLimitTtl') * 1000, // Convert to milliseconds
-      max: this.configService.get('production.security.rateLimitLimit'),
+      windowMs: this.configService.get(
+        'production.security.rateLimitTtl',
+        SECURITY_CONSTANTS.RATE_LIMIT.DEFAULT_WINDOW_MS,
+      ),
+      max: this.configService.get(
+        'production.security.rateLimitLimit',
+        SECURITY_CONSTANTS.RATE_LIMIT.DEFAULT_MAX_REQUESTS,
+      ),
       message: {
         error: 'Too many requests from this IP, please try again later.',
         statusCode: 429,
@@ -45,112 +55,147 @@ export class SecurityMiddleware implements NestMiddleware {
   }
 
   private getHelmetConfig(nonce: string): Record<string, unknown> {
-    const environment =
-      this.configService.get<string>('NODE_ENV') ?? 'development';
+    const environment = this.configService.get<string>(
+      'NODE_ENV',
+      'development',
+    ) as EnvironmentName;
+    const envConfig =
+      ENVIRONMENT_SECURITY[environment] || ENVIRONMENT_SECURITY.development;
     const isDevelopment = environment === 'development';
     const isProduction = environment === 'production';
 
     return {
       contentSecurityPolicy: {
         directives: {
-          defaultSrc: ["'self'"],
-          scriptSrc: [
-            "'self'",
+          [SECURITY_CONSTANTS.CSP.DIRECTIVES.DEFAULT_SRC]: [
+            SECURITY_CONSTANTS.CSP.VALUES.SELF,
+          ],
+          [SECURITY_CONSTANTS.CSP.DIRECTIVES.SCRIPT_SRC]: [
+            SECURITY_CONSTANTS.CSP.VALUES.SELF,
             `'nonce-${nonce}'`,
             // Allow inline scripts only in development
-            ...(isDevelopment ? ["'unsafe-inline'"] : []),
-            // Trusted CDNs for production
-            ...(isProduction
-              ? ['https://cdn.jsdelivr.net', 'https://unpkg.com']
+            ...(envConfig.allowUnsafeInline
+              ? [SECURITY_CONSTANTS.CSP.VALUES.UNSAFE_INLINE]
               : []),
+            // Trusted CDNs for production
+            ...(isProduction ? SECURITY_CONSTANTS.TRUSTED_DOMAINS.CDN : []),
           ],
-          styleSrc: [
-            "'self'",
+          [SECURITY_CONSTANTS.CSP.DIRECTIVES.STYLE_SRC]: [
+            SECURITY_CONSTANTS.CSP.VALUES.SELF,
             `'nonce-${nonce}'`,
             // Use specific hashes instead of unsafe-inline when possible
             "'sha256-47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU='", // Empty inline style hash
             // Only allow unsafe-inline in development
-            ...(isDevelopment ? ["'unsafe-inline'"] : []),
+            ...(envConfig.allowUnsafeInline
+              ? [SECURITY_CONSTANTS.CSP.VALUES.UNSAFE_INLINE]
+              : []),
             // Trusted style CDNs
-            'https://fonts.googleapis.com',
-            'https://cdn.jsdelivr.net',
+            ...SECURITY_CONSTANTS.TRUSTED_DOMAINS.FONTS,
+            ...SECURITY_CONSTANTS.TRUSTED_DOMAINS.CDN,
           ],
-          fontSrc: ["'self'", 'https://fonts.gstatic.com', 'data:'],
-          imgSrc: ["'self'", 'data:', 'https:'],
-          connectSrc: [
-            "'self'",
+          [SECURITY_CONSTANTS.CSP.DIRECTIVES.FONT_SRC]: [
+            SECURITY_CONSTANTS.CSP.VALUES.SELF,
+            ...SECURITY_CONSTANTS.TRUSTED_DOMAINS.FONTS,
+            SECURITY_CONSTANTS.CSP.VALUES.DATA,
+          ],
+          [SECURITY_CONSTANTS.CSP.DIRECTIVES.IMG_SRC]: [
+            SECURITY_CONSTANTS.CSP.VALUES.SELF,
+            SECURITY_CONSTANTS.CSP.VALUES.DATA,
+            SECURITY_CONSTANTS.CSP.VALUES.HTTPS,
+          ],
+          [SECURITY_CONSTANTS.CSP.DIRECTIVES.CONNECT_SRC]: [
+            SECURITY_CONSTANTS.CSP.VALUES.SELF,
             // API endpoints
             ...(isDevelopment
-              ? [
-                  'http://localhost:*',
-                  'ws://localhost:*',
-                  'http://127.0.0.1:*',
-                  // LocalStack endpoints
-                  'http://localstack:*',
-                ]
+              ? SECURITY_CONSTANTS.DEV_DOMAINS.LOCALSTACK
               : [
                   // Production API endpoints
                   'https://api.soundbite.example.com',
                   // AWS services
-                  'https://*.amazonaws.com',
+                  ...SECURITY_CONSTANTS.TRUSTED_DOMAINS.AWS,
                 ]),
           ],
-          mediaSrc: [
-            "'self'",
+          [SECURITY_CONSTANTS.CSP.DIRECTIVES.MEDIA_SRC]: [
+            SECURITY_CONSTANTS.CSP.VALUES.SELF,
             // S3 bucket for audio files
-            'https://*.amazonaws.com',
-            'https://*.s3.amazonaws.com',
+            ...SECURITY_CONSTANTS.TRUSTED_DOMAINS.AWS,
           ],
-          objectSrc: ["'none'"],
-          frameSrc: ["'none'"],
-          baseUri: ["'self'"],
-          formAction: ["'self'"],
-          frameAncestors: ["'none'"],
-          upgradeInsecureRequests: isProduction ? [] : null,
+          [SECURITY_CONSTANTS.CSP.DIRECTIVES.OBJECT_SRC]: [
+            SECURITY_CONSTANTS.CSP.VALUES.NONE,
+          ],
+          [SECURITY_CONSTANTS.CSP.DIRECTIVES.FRAME_SRC]: [
+            SECURITY_CONSTANTS.CSP.VALUES.NONE,
+          ],
+          [SECURITY_CONSTANTS.CSP.DIRECTIVES.BASE_URI]: [
+            SECURITY_CONSTANTS.CSP.VALUES.SELF,
+          ],
+          [SECURITY_CONSTANTS.CSP.DIRECTIVES.FORM_ACTION]: [
+            SECURITY_CONSTANTS.CSP.VALUES.SELF,
+          ],
+          [SECURITY_CONSTANTS.CSP.DIRECTIVES.FRAME_ANCESTORS]: [
+            SECURITY_CONSTANTS.CSP.VALUES.NONE,
+          ],
+          [SECURITY_CONSTANTS.CSP.DIRECTIVES.UPGRADE_INSECURE_REQUESTS]:
+            isProduction ? [] : null,
           // Report violations in production
           ...(isProduction && {
-            reportUri: ['/api/csp-report'],
+            [SECURITY_CONSTANTS.CSP.DIRECTIVES.REPORT_URI]: [
+              SECURITY_CONSTANTS.REPORT_ENDPOINTS.CSP_REPORT,
+            ],
           }),
         },
-        reportOnly: isDevelopment,
+        reportOnly: envConfig.cspReportOnly,
       },
       crossOriginEmbedderPolicy: isProduction
         ? {
-            policy: 'require-corp' as const,
+            policy:
+              SECURITY_CONSTANTS.POLICIES.CROSS_ORIGIN_EMBEDDER_POLICY
+                .REQUIRE_CORP,
           }
         : {
-            policy: 'unsafe-none' as const,
+            policy:
+              SECURITY_CONSTANTS.POLICIES.CROSS_ORIGIN_EMBEDDER_POLICY
+                .UNSAFE_NONE,
           },
       crossOriginOpenerPolicy: {
-        policy: 'same-origin' as const,
+        policy:
+          SECURITY_CONSTANTS.POLICIES.CROSS_ORIGIN_OPENER_POLICY.SAME_ORIGIN,
       },
       crossOriginResourcePolicy: isProduction
         ? {
-            policy: 'same-origin' as const,
+            policy:
+              SECURITY_CONSTANTS.POLICIES.CROSS_ORIGIN_RESOURCE_POLICY
+                .SAME_ORIGIN,
           }
         : {
-            policy: 'cross-origin' as const,
+            policy:
+              SECURITY_CONSTANTS.POLICIES.CROSS_ORIGIN_RESOURCE_POLICY
+                .CROSS_ORIGIN,
           },
       dnsPrefetchControl: {
         allow: false,
       },
       expectCt: {
-        maxAge: 86400,
-        enforce: isProduction,
+        maxAge: SECURITY_CONSTANTS.TIMEOUTS.EXPECT_CT_MAX_AGE,
+        enforce: envConfig.expectCtEnforce,
         // Report violations
         ...(isProduction && {
-          reportUri: '/api/ct-report',
+          reportUri: SECURITY_CONSTANTS.REPORT_ENDPOINTS.CT_REPORT,
         }),
       },
       hsts: {
-        maxAge: isProduction ? 31536000 : 3600, // 1 year in prod, 1 hour in dev
+        maxAge: envConfig.hstsMaxAge,
         includeSubDomains: isProduction,
         preload: isProduction,
       },
       noSniff: true,
       frameguard: { action: 'deny' as const },
       xssFilter: true,
-      referrerPolicy: { policy: 'strict-origin-when-cross-origin' as const },
+      referrerPolicy: {
+        policy:
+          SECURITY_CONSTANTS.POLICIES.REFERRER_POLICY
+            .STRICT_ORIGIN_WHEN_CROSS_ORIGIN,
+      },
       permittedCrossDomainPolicies: false,
       // Hide X-Powered-By header
       hidePoweredBy: true,
@@ -176,12 +221,7 @@ export const getCorsOptions = (
       }
 
       const allowedOrigins = isDevelopment
-        ? [
-            'http://localhost:3000',
-            'http://localhost:3001',
-            'http://localhost:8080',
-            'http://127.0.0.1:3000',
-          ]
+        ? SECURITY_CONSTANTS.DEV_DOMAINS.LOCALHOST
         : (process.env.CORS_ORIGIN ?? '').split(',').filter(Boolean);
 
       if (allowedOrigins.includes(origin) || isDevelopment) {
@@ -190,39 +230,32 @@ export const getCorsOptions = (
         callback(new Error('Not allowed by CORS'), false);
       }
     },
-    methods: ['GET', 'POST', 'OPTIONS'],
-    allowedHeaders: [
-      'Content-Type',
-      'Authorization',
-      'Idempotency-Key',
-      'X-Requested-With',
-      'Accept',
-      'Origin',
-    ],
-    exposedHeaders: [
-      'X-RateLimit-Limit',
-      'X-RateLimit-Remaining',
-      'X-RateLimit-Reset',
-    ],
+    methods: SECURITY_CONSTANTS.CORS.METHODS,
+    allowedHeaders: SECURITY_CONSTANTS.CORS.ALLOWED_HEADERS,
+    exposedHeaders: SECURITY_CONSTANTS.CORS.EXPOSED_HEADERS,
     credentials: true,
-    maxAge: isProduction ? 86400 : 300, // 24 hours in prod, 5 minutes in dev
+    maxAge: isProduction
+      ? SECURITY_CONSTANTS.CORS.MAX_AGE_PROD
+      : SECURITY_CONSTANTS.CORS.MAX_AGE_DEV,
     optionsSuccessStatus: 200,
   };
 };
 
 // Security headers factory
 export const getSecurityHeaders = (nonce?: string): Record<string, string> => ({
-  'X-Content-Type-Options': 'nosniff',
-  'X-Frame-Options': 'DENY',
-  'X-XSS-Protection': '1; mode=block',
-  'Strict-Transport-Security': 'max-age=31536000; includeSubDomains; preload',
-  'Referrer-Policy': 'strict-origin-when-cross-origin',
-  'X-Permitted-Cross-Domain-Policies': 'none',
-  'X-Download-Options': 'noopen',
-  'X-DNS-Prefetch-Control': 'off',
+  [SECURITY_CONSTANTS.HEADERS.X_CONTENT_TYPE_OPTIONS]: 'nosniff',
+  [SECURITY_CONSTANTS.HEADERS.X_FRAME_OPTIONS]: 'DENY',
+  [SECURITY_CONSTANTS.HEADERS.X_XSS_PROTECTION]: '1; mode=block',
+  [SECURITY_CONSTANTS.HEADERS.STRICT_TRANSPORT_SECURITY]:
+    `max-age=${SECURITY_CONSTANTS.TIMEOUTS.HSTS_MAX_AGE_PROD}; includeSubDomains; preload`,
+  [SECURITY_CONSTANTS.HEADERS.REFERRER_POLICY]:
+    SECURITY_CONSTANTS.POLICIES.REFERRER_POLICY.STRICT_ORIGIN_WHEN_CROSS_ORIGIN,
+  [SECURITY_CONSTANTS.HEADERS.X_PERMITTED_CROSS_DOMAIN_POLICIES]: 'none',
+  [SECURITY_CONSTANTS.HEADERS.X_DOWNLOAD_OPTIONS]: 'noopen',
+  [SECURITY_CONSTANTS.HEADERS.X_DNS_PREFETCH_CONTROL]: 'off',
   ...(nonce !== undefined &&
     nonce !== null &&
     nonce.length > 0 && {
-      'Content-Security-Policy-Nonce': nonce,
+      [SECURITY_CONSTANTS.HEADERS.CONTENT_SECURITY_POLICY_NONCE]: nonce,
     }),
 });
