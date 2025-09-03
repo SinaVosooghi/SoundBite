@@ -39,9 +39,7 @@ export class EnvironmentLoader {
   }
 
   public static getInstance(): EnvironmentLoader {
-    if (!EnvironmentLoader.instance) {
-      EnvironmentLoader.instance = new EnvironmentLoader();
-    }
+    EnvironmentLoader.instance ??= new EnvironmentLoader();
     return EnvironmentLoader.instance;
   }
 
@@ -78,11 +76,15 @@ export class EnvironmentLoader {
   }
 
   private detectEnvironment(): EnvironmentConfig {
-    const nodeEnv = process.env.NODE_ENV || 'development';
-    const awsConnectionMode = process.env.AWS_CONNECTION_MODE || 'localstack';
+    const nodeEnv = process.env.NODE_ENV ?? 'development';
+    const awsConnectionMode = process.env.AWS_CONNECTION_MODE ?? 'localstack';
 
     // Check if running in Docker (EC2)
-    if (process.env.ENVIRONMENT) {
+    if (
+      process.env.ENVIRONMENT !== undefined &&
+      process.env.ENVIRONMENT !== null &&
+      process.env.ENVIRONMENT.length > 0
+    ) {
       switch (process.env.ENVIRONMENT) {
         case 'staging':
           return stagingConfig;
@@ -109,10 +111,12 @@ export class EnvironmentLoader {
 
 // Export singleton instance
 export const environmentLoader = EnvironmentLoader.getInstance();
-export const getEnvironmentConfig = () => environmentLoader.getConfig();
-export const getEnvironmentName = () => environmentLoader.getEnvironmentName();
-export const isDevelopment = () => environmentLoader.isDevelopment();
-export const isStaging = () => environmentLoader.isStaging();
-export const isProduction = () => environmentLoader.isProduction();
-export const isLocalStack = () => environmentLoader.isLocalStack();
-export const isRealAWS = () => environmentLoader.isRealAWS();
+export const getEnvironmentConfig = (): EnvironmentConfig =>
+  environmentLoader.getConfig();
+export const getEnvironmentName = (): string =>
+  environmentLoader.getEnvironmentName();
+export const isDevelopment = (): boolean => environmentLoader.isDevelopment();
+export const isStaging = (): boolean => environmentLoader.isStaging();
+export const isProduction = (): boolean => environmentLoader.isProduction();
+export const isLocalStack = (): boolean => environmentLoader.isLocalStack();
+export const isRealAWS = (): boolean => environmentLoader.isRealAWS();

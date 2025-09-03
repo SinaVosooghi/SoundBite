@@ -1,11 +1,12 @@
 import { NestFactory } from '@nestjs/core';
-import { ValidationPipe } from '@nestjs/common';
+import { ValidationPipe, Logger } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { AppModule } from './app.module';
 import { getEnvironmentConfig, getEnvironmentName } from './config';
 
-async function bootstrap() {
+async function bootstrap(): Promise<void> {
   const app = await NestFactory.create(AppModule);
+  const logger = new Logger('Bootstrap');
   const envConfig = getEnvironmentConfig();
 
   // Enable global validation
@@ -33,16 +34,21 @@ async function bootstrap() {
   SwaggerModule.setup('api', app, document);
 
   await app.listen(envConfig.port);
-  console.log(
+
+  logger.log(
     `🚀 Application is running on: http://localhost:${envConfig.port}`,
   );
-  console.log(`🌍 Environment: ${getEnvironmentName()}`);
-  console.log(`📚 API Documentation: http://localhost:${envConfig.port}/api`);
+  logger.log(`🌍 Environment: ${getEnvironmentName()}`);
+  logger.log(`📚 API Documentation: http://localhost:${envConfig.port}/api`);
 
-  if (envConfig.aws.endpoint) {
-    console.log(`🔗 AWS Endpoint: ${envConfig.aws.endpoint}`);
+  if (
+    envConfig.aws.endpoint !== undefined &&
+    envConfig.aws.endpoint !== null &&
+    envConfig.aws.endpoint.length > 0
+  ) {
+    logger.log(`🔗 AWS Endpoint: ${envConfig.aws.endpoint}`);
   } else {
-    console.log(`🔗 AWS Endpoint: AWS default (${envConfig.aws.region})`);
+    logger.log(`🔗 AWS Endpoint: AWS default (${envConfig.aws.region})`);
   }
 }
 void bootstrap();
