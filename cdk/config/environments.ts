@@ -52,7 +52,7 @@ export const environments: Record<string, EnvironmentConfig> = {
 
 export const getEnvironmentConfig = (env: string): EnvironmentConfig => {
   const config = environments[env];
-  if (!config) {
+  if (config === undefined) {
     throw new Error(
       `Unknown environment: ${env}. Valid environments: ${Object.keys(environments).join(', ')}`,
     );
@@ -65,13 +65,13 @@ export const getAllEnvironments = (): string[] => Object.keys(environments);
 export const getEnvironmentByPort = (
   port: number,
 ): EnvironmentConfig | null => {
-  return Object.values(environments).find((env) => env.port === port) || null;
+  return Object.values(environments).find((env) => env.port === port) ?? null;
 };
 
 export const getEnvironmentByPrefix = (
   prefix: string,
 ): EnvironmentConfig | null => {
   return (
-    Object.values(environments).find((env) => env.prefix === prefix) || null
+    Object.values(environments).find((env) => env.prefix === prefix) ?? null
   );
 };

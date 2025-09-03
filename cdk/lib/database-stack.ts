@@ -1,5 +1,5 @@
 import * as cdk from 'aws-cdk-lib';
-import { Construct } from 'constructs';
+import type { Construct } from 'constructs';
 import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
 import * as cloudwatch from 'aws-cdk-lib/aws-cloudwatch';
 
@@ -22,9 +22,10 @@ export class DatabaseStack extends cdk.Stack {
     // DynamoDB Table with TTL for automatic cleanup
     // For multi-environment: use environment prefixes in partition key
     this.table = new dynamodb.Table(this, 'SoundbitesTable', {
-      tableName: props.enableMultiEnvironment
-        ? `${props.projectName}-MultiEnv-SoundbitesTable`
-        : `${props.projectName}-${props.environment}-SoundbitesTable`,
+      tableName:
+        props.enableMultiEnvironment === true
+          ? `${props.projectName}-MultiEnv-SoundbitesTable`
+          : `${props.projectName}-${props.environment}-SoundbitesTable`,
       partitionKey: { name: 'pk', type: dynamodb.AttributeType.STRING }, // env#id for multi-env
       sortKey: { name: 'sk', type: dynamodb.AttributeType.STRING }, // timestamp for multi-env
       billingMode: dynamodb.BillingMode.PAY_PER_REQUEST, // Keep Free Tier friendly
@@ -34,7 +35,7 @@ export class DatabaseStack extends cdk.Stack {
     });
 
     // Add GSI for environment-based queries (multi-environment)
-    if (props.enableMultiEnvironment) {
+    if (props.enableMultiEnvironment === true) {
       this.table.addGlobalSecondaryIndex({
         indexName: 'EnvironmentIndex',
         partitionKey: {
@@ -50,9 +51,10 @@ export class DatabaseStack extends cdk.Stack {
     this.table.addGlobalSecondaryIndex({
       indexName: 'UserIdIndex',
       partitionKey: { name: 'userId', type: dynamodb.AttributeType.STRING },
-      sortKey: props.enableMultiEnvironment
-        ? { name: 'environment', type: dynamodb.AttributeType.STRING }
-        : { name: 'createdAt', type: dynamodb.AttributeType.STRING },
+      sortKey:
+        props.enableMultiEnvironment === true
+          ? { name: 'environment', type: dynamodb.AttributeType.STRING }
+          : { name: 'createdAt', type: dynamodb.AttributeType.STRING },
       projectionType: dynamodb.ProjectionType.ALL,
     });
 
@@ -113,23 +115,25 @@ export class DatabaseStack extends cdk.Stack {
     new cdk.CfnOutput(this, 'TableName', {
       value: this.table.tableName,
       description: 'DynamoDB Table Name',
-      exportName: props.enableMultiEnvironment
-        ? `${props.projectName}-MultiEnv-TableName`
-        : `${props.projectName}-${props.environment}-TableName`,
+      exportName:
+        props.enableMultiEnvironment === true
+          ? `${props.projectName}-MultiEnv-TableName`
+          : `${props.projectName}-${props.environment}-TableName`,
     });
 
     new cdk.CfnOutput(this, 'TableArn', {
       value: this.table.tableArn,
       description: 'DynamoDB Table ARN',
-      exportName: props.enableMultiEnvironment
-        ? `${props.projectName}-MultiEnv-TableArn`
-        : `${props.projectName}-${props.environment}-TableArn`,
+      exportName:
+        props.enableMultiEnvironment === true
+          ? `${props.projectName}-MultiEnv-TableArn`
+          : `${props.projectName}-${props.environment}-TableArn`,
     });
 
     // Add stack tags
     cdk.Tags.of(this).add('Service', 'Database');
     cdk.Tags.of(this).add('Component', 'DynamoDB');
-    if (props.enableMultiEnvironment) {
+    if (props.enableMultiEnvironment === true) {
       cdk.Tags.of(this).add('MultiEnvironment', 'true');
     }
   }

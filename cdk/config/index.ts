@@ -3,8 +3,8 @@ export * from './environments';
 export * from './shared-config';
 
 // Re-export commonly used types and functions
+export type { EnvironmentConfig } from './environments';
 export {
-  EnvironmentConfig,
   environments,
   getEnvironmentConfig,
   getAllEnvironments,
@@ -12,8 +12,8 @@ export {
   getEnvironmentByPrefix,
 } from './environments';
 
+export type { SharedConfig } from './shared-config';
 export {
-  SharedConfig,
   sharedConfig,
   getSharedConfig,
   getCostOptimizationConfig,

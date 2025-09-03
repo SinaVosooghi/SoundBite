@@ -15,10 +15,10 @@ const localstackConfig = {
   enableMultiEnvironment: true,
   description: 'SoundBite LocalStack Development Environment',
   tags: {
-    Environment: 'development-localstack',
-    Project: 'SoundBite',
-    Purpose: 'LocalStack Development',
-    CostCenter: 'development',
+    environment: 'development-localstack',
+    project: 'SoundBite',
+    purpose: 'LocalStack Development',
+    costCenter: 'development',
   },
 };
 
@@ -69,12 +69,12 @@ cdk.Tags.of(app).add('Environment', 'development-localstack');
 cdk.Tags.of(app).add('Project', 'SoundBite');
 cdk.Tags.of(app).add('Purpose', 'LocalStack Development');
 
-console.log('🚀 LocalStack CDK App initialized');
-console.log('📦 Stacks to deploy:');
-console.log('  - SoundBite-LocalStack-Database');
-console.log('  - SoundBite-LocalStack-Storage');
-console.log('  - SoundBite-LocalStack-Queue');
-console.log('  - SoundBite-LocalStack-Compute');
-console.log('');
-console.log('🔧 Deploy with: cdklocal deploy --all');
-console.log('🧹 Clean up with: cdklocal destroy --all');
+console.warn('🚀 LocalStack CDK App initialized');
+console.warn('📦 Stacks to deploy:');
+console.warn('  - SoundBite-LocalStack-Database');
+console.warn('  - SoundBite-LocalStack-Storage');
+console.warn('  - SoundBite-LocalStack-Queue');
+console.warn('  - SoundBite-LocalStack-Compute');
+console.warn('');
+console.warn('🔧 Deploy with: cdklocal deploy --all');
+console.warn('🧹 Clean up with: cdklocal destroy --all');

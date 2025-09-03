@@ -78,7 +78,10 @@ export const sharedConfig: SharedConfig = {
 
 export const getSharedConfig = (): SharedConfig => sharedConfig;
 
-export const getCostOptimizationConfig = () => sharedConfig.costOptimization;
-export const getMonitoringConfig = () => sharedConfig.monitoring;
-export const getSecurityConfig = () => sharedConfig.security;
-export const getPerformanceConfig = () => sharedConfig.performance;
+export const getCostOptimizationConfig = (): CostOptimizationConfig =>
+  sharedConfig.costOptimization;
+export const getMonitoringConfig = (): MonitoringConfig =>
+  sharedConfig.monitoring;
+export const getSecurityConfig = (): SecurityConfig => sharedConfig.security;
+export const getPerformanceConfig = (): PerformanceConfig =>
+  sharedConfig.performance;

@@ -10,8 +10,8 @@ const app = new cdk.App();
 
 // Environment configuration for multi-environment deployment
 const env = {
-  account: process.env.CDK_DEFAULT_ACCOUNT || '000000000001',
-  region: process.env.CDK_DEFAULT_REGION || 'us-east-1',
+  account: process.env.CDK_DEFAULT_ACCOUNT ?? '000000000001',
+  region: process.env.CDK_DEFAULT_REGION ?? 'us-east-1',
 };
 
 // Stack configuration for shared multi-environment resources
@@ -22,10 +22,10 @@ const stackConfig = {
   ...env,
 };
 
-console.log(
+console.warn(
   `Deploying ${stackConfig.projectName} Multi-Environment Shared Resources`,
 );
-console.log(
+console.warn(
   `This will create shared resources for staging and production environments`,
 );
 
@@ -94,20 +94,20 @@ computeStack.addDependency(queueStack);
 
 // Add tags for better resource management
 const tags = {
-  Project: stackConfig.projectName,
-  Environment: 'multienv',
-  EnvironmentType: 'shared',
-  ManagedBy: 'CDK',
-  MultiEnvironment: 'true',
+  project: stackConfig.projectName,
+  environment: 'multienv',
+  environmentType: 'shared',
+  managedBy: 'CDK',
+  multiEnvironment: 'true',
 };
 
 [databaseStack, storageStack, queueStack, computeStack, apiStack].forEach(
   (stack) => {
-    cdk.Tags.of(stack).add('Project', tags.Project);
-    cdk.Tags.of(stack).add('Environment', tags.Environment);
-    cdk.Tags.of(stack).add('EnvironmentType', tags.EnvironmentType);
-    cdk.Tags.of(stack).add('ManagedBy', tags.ManagedBy);
-    cdk.Tags.of(stack).add('MultiEnvironment', tags.MultiEnvironment);
+    cdk.Tags.of(stack).add('Project', tags.project);
+    cdk.Tags.of(stack).add('Environment', tags.environment);
+    cdk.Tags.of(stack).add('EnvironmentType', tags.environmentType);
+    cdk.Tags.of(stack).add('ManagedBy', tags.managedBy);
+    cdk.Tags.of(stack).add('MultiEnvironment', tags.multiEnvironment);
   },
 );
 

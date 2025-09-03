@@ -1,12 +1,12 @@
 import * as cdk from 'aws-cdk-lib';
-import { Construct } from 'constructs';
+import type { Construct } from 'constructs';
 import * as ec2 from 'aws-cdk-lib/aws-ec2';
 import * as iam from 'aws-cdk-lib/aws-iam';
 import * as cloudwatch from 'aws-cdk-lib/aws-cloudwatch';
-import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
-import * as s3 from 'aws-cdk-lib/aws-s3';
-import * as sqs from 'aws-cdk-lib/aws-sqs';
-import * as ecr from 'aws-cdk-lib/aws-ecr';
+import type * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
+import type * as s3 from 'aws-cdk-lib/aws-s3';
+import type * as sqs from 'aws-cdk-lib/aws-sqs';
+import type * as ecr from 'aws-cdk-lib/aws-ecr';
 
 export interface ApiStackProps extends cdk.StackProps {
   projectName: string;
@@ -58,7 +58,7 @@ export class ApiStack extends cdk.Stack {
     );
 
     // Multi-environment ports
-    if (props.enableMultiEnvironment) {
+    if (props.enableMultiEnvironment ?? false) {
       apiSg.addIngressRule(
         ec2.Peer.anyIpv4(),
         ec2.Port.tcp(3001),
@@ -111,7 +111,7 @@ export class ApiStack extends cdk.Stack {
     // User data script for EC2 with Docker and multi-environment setup
     const userData = ec2.UserData.forLinux();
 
-    if (props.enableMultiEnvironment) {
+    if (props.enableMultiEnvironment ?? false) {
       // Multi-environment setup - Updated: 2025-08-14
       userData.addCommands(
         'dnf update -y',
@@ -297,7 +297,7 @@ export class ApiStack extends cdk.Stack {
     });
 
     // Add multi-environment specific outputs
-    if (props.enableMultiEnvironment) {
+    if (props.enableMultiEnvironment ?? false) {
       new cdk.CfnOutput(this, 'MultiEnvironmentEndpoints', {
         value: `Development: /dev/, Staging: /staging/, Production: /prod/`,
         description: 'Multi-Environment API Endpoints',
@@ -308,7 +308,7 @@ export class ApiStack extends cdk.Stack {
     // Add stack tags
     cdk.Tags.of(this).add('Service', 'API');
     cdk.Tags.of(this).add('Component', 'EC2');
-    if (props.enableMultiEnvironment) {
+    if (props.enableMultiEnvironment ?? false) {
       cdk.Tags.of(this).add('MultiEnvironment', 'true');
     }
   }

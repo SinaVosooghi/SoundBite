@@ -1,15 +1,15 @@
 import * as cdk from 'aws-cdk-lib';
-import { Construct } from 'constructs';
+import type { Construct } from 'constructs';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
 import * as lambdaEventSources from 'aws-cdk-lib/aws-lambda-event-sources';
 import * as iam from 'aws-cdk-lib/aws-iam';
 import * as logs from 'aws-cdk-lib/aws-logs';
 import * as cloudwatch from 'aws-cdk-lib/aws-cloudwatch';
 import * as ecr from 'aws-cdk-lib/aws-ecr';
-import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
-import * as s3 from 'aws-cdk-lib/aws-s3';
-import * as sqs from 'aws-cdk-lib/aws-sqs';
-import * as ec2 from 'aws-cdk-lib/aws-ec2';
+import type * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
+import type * as s3 from 'aws-cdk-lib/aws-s3';
+import type * as sqs from 'aws-cdk-lib/aws-sqs';
+import type * as ec2 from 'aws-cdk-lib/aws-ec2';
 
 export interface ComputeStackProps extends cdk.StackProps {
   projectName: string;

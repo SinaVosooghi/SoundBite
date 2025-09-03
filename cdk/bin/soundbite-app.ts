@@ -11,13 +11,13 @@ const app = new cdk.App();
 
 // Environment configuration
 const env = {
-  account: process.env.CDK_DEFAULT_ACCOUNT || '000000000001',
-  region: process.env.CDK_DEFAULT_REGION || 'us-east-1',
+  account: process.env.CDK_DEFAULT_ACCOUNT ?? '000000000001',
+  region: process.env.CDK_DEFAULT_REGION ?? 'us-east-1',
 };
 
 // Get target environment from command line or environment variable
 const targetEnv =
-  process.env.CDK_ENVIRONMENT || process.argv[2] || 'development';
+  process.env.CDK_ENVIRONMENT ?? (process.argv[2] || 'development');
 const validEnvironments = getAllEnvironments();
 
 if (!validEnvironments.includes(targetEnv)) {
@@ -36,8 +36,10 @@ const stackConfig = {
   ...env,
 };
 
-console.log(`Deploying ${stackConfig.projectName} to ${targetEnv} environment`);
-console.log(`Environment config:`, environmentConfig);
+console.warn(
+  `Deploying ${stackConfig.projectName} to ${targetEnv} environment`,
+);
+console.warn(`Environment config:`, JSON.stringify(environmentConfig, null, 2));
 
 // Individual service stacks for better observability and debugging
 const databaseStack = new DatabaseStack(
@@ -100,18 +102,18 @@ computeStack.addDependency(queueStack);
 
 // Add tags for better resource management
 const tags = {
-  Project: stackConfig.projectName,
-  Environment: targetEnv,
-  EnvironmentPrefix: environmentConfig.prefix,
-  ManagedBy: 'CDK',
+  project: stackConfig.projectName,
+  environment: targetEnv,
+  environmentPrefix: environmentConfig.prefix,
+  managedBy: 'CDK',
 };
 
 [databaseStack, storageStack, queueStack, computeStack, apiStack].forEach(
   (stack) => {
-    cdk.Tags.of(stack).add('Project', tags.Project);
-    cdk.Tags.of(stack).add('Environment', tags.Environment);
-    cdk.Tags.of(stack).add('EnvironmentPrefix', tags.EnvironmentPrefix);
-    cdk.Tags.of(stack).add('ManagedBy', tags.ManagedBy);
+    cdk.Tags.of(stack).add('Project', tags.project);
+    cdk.Tags.of(stack).add('Environment', tags.environment);
+    cdk.Tags.of(stack).add('EnvironmentPrefix', tags.environmentPrefix);
+    cdk.Tags.of(stack).add('ManagedBy', tags.managedBy);
   },
 );
 
