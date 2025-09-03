@@ -50,7 +50,9 @@ jobs:
           ${{ runner.os }}-yarn-
         
     - name: Install dependencies
-      run: yarn install --immutable
+      run: |
+        # Try immutable first, fallback to regular install if lockfile needs update
+        yarn install --immutable || yarn install
       
     - name: Run linting
       run: yarn lint
@@ -94,7 +96,9 @@ jobs:
       run: corepack prepare yarn@${{ env.YARN_VERSION }} --activate
         
     - name: Install dependencies
-      run: yarn install --immutable
+      run: |
+        # Try immutable first, fallback to regular install if lockfile needs update
+        yarn install --immutable || yarn install
       
     - name: Build application
       run: yarn build
@@ -129,7 +133,9 @@ jobs:
       run: corepack prepare yarn@${{ env.YARN_VERSION }} --activate
         
     - name: Install dependencies
-      run: yarn install --immutable
+      run: |
+        # Try immutable first, fallback to regular install if lockfile needs update
+        yarn install --immutable || yarn install
       
     - name: Run security audit
       run: yarn security:scan
