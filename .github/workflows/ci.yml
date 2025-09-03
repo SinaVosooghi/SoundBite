@@ -55,9 +55,6 @@ jobs:
     - name: Run linting
       run: yarn lint
       
-    - name: Run unit tests
-      run: yarn test:unit
-      
     - name: Run tests with coverage
       run: yarn test:ci
       
@@ -69,25 +66,8 @@ jobs:
         name: codecov-umbrella
         fail_ci_if_error: false
       
-    - name: Run e2e tests (if LocalStack available)
-      run: |
-        if command -v localstack &> /dev/null; then
-          ./scripts/bootstrap-localstack.sh
-          yarn start:dev &
-          sleep 10
-          cd lambda/processor
-          SQS_QUEUE_URL="http://sqs.us-east-1.localhost.localstack.cloud:4566/000000000000/SoundbiteQueue" \
-          AWS_REGION="us-east-1" \
-          BUCKET_NAME="soundbitesbucket" \
-          TABLE_NAME="SoundbitesTable" \
-          NODE_ENV="development" \
-          npx ts-node poller.ts &
-          cd ../..
-          sleep 5
-          ./test/dev-e2e-test.sh || echo "E2E tests failed but continuing..."
-        else
-          echo "LocalStack not available, skipping e2e tests"
-        fi
+    - name: Run e2e tests
+      run: yarn test:e2e
       continue-on-error: true
 
   build:

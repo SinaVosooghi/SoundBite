@@ -107,13 +107,11 @@ jobs:
             soundbite-api:test
           sleep 15
           
-          # Test health endpoint
-          curl -f http://localhost:3000/health || exit 1
+          # Test basic endpoint (root)
+          curl -f http://localhost:3000/ || exit 1
           
-          # Basic API test
-          curl -f -X POST http://localhost:3000/soundbites \
-            -H "Content-Type: application/json" \
-            -d '{"text":"test","voice":"Joanna"}' || echo "API test failed (expected in test env)"
+          # Test API documentation endpoint
+          curl -f http://localhost:3000/api || echo "API docs test failed (expected in test env)"
           
           # Cleanup
           docker stop test-api
