@@ -273,7 +273,7 @@ jobs:
           echo "Checking CloudWatch alarms..."
           ALARMS=$(aws cloudwatch describe-alarms \
             --state-value ALARM \
-            --query 'MetricAlarms[?starts_with(AlarmName, `SoundBite`)].[AlarmName,StateReason]' \
+            --query "MetricAlarms[?starts_with(AlarmName, 'SoundBite')].[AlarmName,StateReason]" \
             --output table)
           
           if [ -n "$ALARMS" ] && [ "$ALARMS" != "None" ]; then
@@ -328,7 +328,7 @@ jobs:
           
           # Check for non-compliant resources
           NON_COMPLIANT=$(aws configservice get-compliance-summary-by-resource-type \
-            --query 'ComplianceSummaryByResourceType[?ComplianceSummary.NonCompliantResourceCount.CappedCount > `0`]' \
+            --query "ComplianceSummaryByResourceType[?ComplianceSummary.NonCompliantResourceCount.CappedCount > '0']" \
             --output json)
           
           if [ "$NON_COMPLIANT" != "[]" ]; then
