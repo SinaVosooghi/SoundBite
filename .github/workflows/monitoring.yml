@@ -25,6 +25,10 @@ on:
           - performance
           - security
 
+permissions:
+  id-token: write   # required for OIDC
+  contents: read
+
 env:
   AWS_REGION: us-east-1
 
@@ -32,18 +36,17 @@ jobs:
   health-check:
     name: Health Check
     runs-on: ubuntu-latest
-    if: false  # Disabled until AWS credentials are configured
+    if: github.event.inputs.check_type == 'all' || github.event.inputs.check_type == 'health' || github.event_name == 'schedule'
     environment: ${{ github.event.inputs.environment || 'production' }}
     
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Configure AWS credentials
+      - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          role-to-assume: arn:aws:iam::${{ vars.AWS_ACCOUNT_ID_PROD }}:role/GitHubActions-SoundBite-Prod
           aws-region: ${{ env.AWS_REGION }}
 
       - name: Check API health
@@ -155,18 +158,17 @@ jobs:
   performance-monitoring:
     name: Performance Monitoring
     runs-on: ubuntu-latest
-    if: false  # Disabled until AWS credentials are configured
+    if: github.event.inputs.check_type == 'all' || github.event.inputs.check_type == 'performance'
     environment: ${{ github.event.inputs.environment || 'production' }}
     
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Configure AWS credentials
+      - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          role-to-assume: arn:aws:iam::${{ vars.AWS_ACCOUNT_ID_PROD }}:role/GitHubActions-SoundBite-Prod
           aws-region: ${{ env.AWS_REGION }}
 
       - name: Check CloudWatch metrics
@@ -229,18 +231,17 @@ jobs:
   security-monitoring:
     name: Security Monitoring
     runs-on: ubuntu-latest
-    if: false  # Disabled until AWS credentials are configured
+    if: github.event.inputs.check_type == 'all' || github.event.inputs.check_type == 'security'
     environment: ${{ github.event.inputs.environment || 'production' }}
     
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Configure AWS credentials
+      - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          role-to-assume: arn:aws:iam::${{ vars.AWS_ACCOUNT_ID_PROD }}:role/GitHubActions-SoundBite-Prod
           aws-region: ${{ env.AWS_REGION }}
 
       - name: Check AWS Config compliance

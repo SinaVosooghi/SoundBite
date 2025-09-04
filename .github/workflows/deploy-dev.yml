@@ -1,0 +1,84 @@
+name: Deploy (dev)
+
+on:
+  push:
+    branches: [ master ]
+
+permissions:
+  id-token: write   # required for OIDC
+  contents: read
+
+concurrency:
+  group: deploy-dev
+  cancel-in-progress: true
+
+env:
+  AWS_REGION: ${{ vars.AWS_REGION }}
+  AWS_ACCOUNT_ID: ${{ vars.AWS_ACCOUNT_ID_DEV }}
+  CDK_STACKS: ${{ vars.CDK_STACKS }}
+
+jobs:
+  deploy:
+    name: Deploy to Development
+    runs-on: ubuntu-latest
+    environment: dev
+    timeout-minutes: 30
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: 22
+        cache: 'yarn'
+        
+    - name: Enable Corepack
+      run: corepack enable
+        
+    - name: Setup Yarn
+      run: corepack prepare yarn@4.9.4 --activate
+        
+    - name: Install dependencies
+      run: yarn install --immutable
+      
+    - name: Configure AWS credentials (OIDC)
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        role-to-assume: arn:aws:iam::${{ env.AWS_ACCOUNT_ID }}:role/GitHubActions-SoundBite-Dev
+        aws-region: ${{ env.AWS_REGION }}
+        
+    - name: Verify AWS credentials
+      run: |
+        aws sts get-caller-identity
+        echo "✅ AWS credentials configured successfully"
+        
+    - name: CDK Bootstrap (if needed)
+      working-directory: cdk
+      run: |
+        yarn install --immutable
+        npx cdk bootstrap aws://${{ env.AWS_ACCOUNT_ID }}/${{ env.AWS_REGION }}
+        
+    - name: CDK Synth
+      working-directory: cdk
+      run: |
+        npx cdk synth --quiet
+        
+    - name: CDK Deploy
+      working-directory: cdk
+      run: |
+        npx cdk deploy $CDK_STACKS --require-approval never --outputs-file deployment-outputs.json
+        
+    - name: Upload deployment outputs
+      uses: actions/upload-artifact@v4
+      with:
+        name: deployment-outputs-dev
+        path: cdk/deployment-outputs.json
+        
+    - name: Notify deployment success
+      run: |
+        echo "✅ Development deployment completed successfully!"
+        echo "Stack: $CDK_STACKS"
+        echo "Region: ${{ env.AWS_REGION }}"
+        echo "Account: ${{ env.AWS_ACCOUNT_ID }}"
