@@ -21,7 +21,7 @@ jobs:
   deploy:
     name: Deploy to Production
     runs-on: ubuntu-latest
-    # environment: prod  # Temporarily disabled due to OIDC environment issue   # set a required reviewer in repo > Environments > prod
+    environment: production
     timeout-minutes: 45
     
     steps:

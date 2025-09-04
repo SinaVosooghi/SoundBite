@@ -37,7 +37,7 @@ jobs:
     name: Health Check
     runs-on: ubuntu-latest
     if: github.event.inputs.check_type == 'all' || github.event.inputs.check_type == 'health' || github.event_name == 'schedule'
-    # environment: ${{ github.event.inputs.environment || 'dev' }}  # Temporarily disabled due to OIDC environment issue
+    environment: ${{ github.event.inputs.environment || 'dev' }}
     
     steps:
       - name: Checkout code
@@ -193,7 +193,7 @@ jobs:
     name: Performance Monitoring
     runs-on: ubuntu-latest
     if: github.event.inputs.check_type == 'all' || github.event.inputs.check_type == 'performance'
-    # environment: ${{ github.event.inputs.environment || 'dev' }}  # Temporarily disabled due to OIDC environment issue
+    environment: ${{ github.event.inputs.environment || 'dev' }}
     
     steps:
       - name: Checkout code
@@ -288,7 +288,7 @@ jobs:
     name: Security Monitoring
     runs-on: ubuntu-latest
     if: github.event.inputs.check_type == 'all' || github.event.inputs.check_type == 'security'
-    # environment: ${{ github.event.inputs.environment || 'dev' }}  # Temporarily disabled due to OIDC environment issue
+    environment: ${{ github.event.inputs.environment || 'dev' }}
     
     steps:
       - name: Checkout code

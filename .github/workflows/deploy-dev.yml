@@ -21,7 +21,7 @@ jobs:
   deploy:
     name: Deploy to Development
     runs-on: ubuntu-latest
-    # environment: dev  # Temporarily disabled due to OIDC environment issue
+    environment: dev
     timeout-minutes: 30
     
     steps:
