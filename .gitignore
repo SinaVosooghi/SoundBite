@@ -4,7 +4,7 @@ node_modules/
 
 # Yarn
 # .yarn/
-.yarnrc.yml
+# .yarnrc.yml
 .yarn-integrity
 
 # Build artifacts
