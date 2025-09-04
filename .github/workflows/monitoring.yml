@@ -52,7 +52,7 @@ jobs:
           
           # Assume the role
           CREDS=$(aws sts assume-role-with-web-identity \
-            --role-arn arn:aws:iam::${{ vars.AWS_ACCOUNT_ID_PROD }}:role/GitHubActions-SoundBite-Prod \
+            --role-arn arn:aws:iam::${{ vars.AWS_ACCOUNT_ID_DEV }}:role/GitHubActions-SoundBite-Dev \
             --web-identity-token $TOKEN \
             --role-session-name github-actions-monitoring \
             --region ${{ env.AWS_REGION }} \
@@ -196,7 +196,7 @@ jobs:
           
           # Assume the role
           CREDS=$(aws sts assume-role-with-web-identity \
-            --role-arn arn:aws:iam::${{ vars.AWS_ACCOUNT_ID_PROD }}:role/GitHubActions-SoundBite-Prod \
+            --role-arn arn:aws:iam::${{ vars.AWS_ACCOUNT_ID_DEV }}:role/GitHubActions-SoundBite-Dev \
             --web-identity-token $TOKEN \
             --role-session-name github-actions-monitoring \
             --region ${{ env.AWS_REGION }} \
@@ -291,7 +291,7 @@ jobs:
           
           # Assume the role
           CREDS=$(aws sts assume-role-with-web-identity \
-            --role-arn arn:aws:iam::${{ vars.AWS_ACCOUNT_ID_PROD }}:role/GitHubActions-SoundBite-Prod \
+            --role-arn arn:aws:iam::${{ vars.AWS_ACCOUNT_ID_DEV }}:role/GitHubActions-SoundBite-Dev \
             --web-identity-token $TOKEN \
             --role-session-name github-actions-monitoring \
             --region ${{ env.AWS_REGION }} \
