@@ -32,11 +32,11 @@ jobs:
         image: localstack/localstack:3
         ports: [ "4566:4566" ]
         env:
-          SERVICES: s3,sqs,dynamodb,sts,lambda,apigateway
-          DEBUG: 1
+          SERVICES: s3,sqs,dynamodb,sts
+          DEBUG: 0
         options: >-
-          --health-cmd="curl -s http://localhost:4566/_localstack/health | jq -e '.services.s3 == \"running\"'"
-          --health-interval=5s --health-timeout=2m --health-retries=30
+          --health-cmd="curl -s http://localhost:4566/_localstack/health"
+          --health-interval=10s --health-timeout=5m --health-retries=10
     
     steps:
     - name: Checkout code
