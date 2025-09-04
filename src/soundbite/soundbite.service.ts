@@ -75,12 +75,12 @@ export class SoundbiteService {
       
       // Create mock clients to prevent null reference errors
       this.sqs = {
-        send: async () => {
+        send: () => {
           throw new Error('AWS services not available in test environment');
         },
       } as SQSClient;
       this.dynamo = {
-        send: async () => {
+        send: () => {
           throw new Error('AWS services not available in test environment');
         },
       } as DynamoDBClient;
