@@ -4,7 +4,6 @@ import type { Request, Response, NextFunction } from 'express';
 import helmet from 'helmet';
 import type { RateLimitRequestHandler } from 'express-rate-limit';
 import rateLimit from 'express-rate-limit';
-import type { ConfigService } from '@nestjs/config';
 import { randomBytes } from 'crypto';
 import {
   SECURITY_CONSTANTS,
@@ -20,17 +19,11 @@ export interface SecurityRequest extends Request {
 export class SecurityMiddleware implements NestMiddleware {
   private rateLimiter: RateLimitRequestHandler;
 
-  constructor(private configService: ConfigService) {
-    // Configure rate limiting
+  constructor() {
+    // Configure rate limiting using environment variables
     this.rateLimiter = rateLimit({
-      windowMs: this.configService.get(
-        'production.security.rateLimitTtl',
-        SECURITY_CONSTANTS.RATE_LIMIT.DEFAULT_WINDOW_MS,
-      ),
-      max: this.configService.get(
-        'production.security.rateLimitLimit',
-        SECURITY_CONSTANTS.RATE_LIMIT.DEFAULT_MAX_REQUESTS,
-      ),
+      windowMs: parseInt(process.env.RATE_LIMIT_TTL || SECURITY_CONSTANTS.RATE_LIMIT.DEFAULT_WINDOW_MS.toString()),
+      max: parseInt(process.env.RATE_LIMIT_MAX || SECURITY_CONSTANTS.RATE_LIMIT.DEFAULT_MAX_REQUESTS.toString()),
       message: {
         error: 'Too many requests from this IP, please try again later.',
         statusCode: 429,
@@ -55,10 +48,7 @@ export class SecurityMiddleware implements NestMiddleware {
   }
 
   private getHelmetConfig(nonce: string): Record<string, unknown> {
-    const environment = this.configService.get<string>(
-      'NODE_ENV',
-      'development',
-    ) as EnvironmentName;
+    const environment = (process.env.NODE_ENV || 'development') as EnvironmentName;
     const envConfig =
       ENVIRONMENT_SECURITY[environment] ?? ENVIRONMENT_SECURITY.development;
     const isDevelopment = environment === 'development';

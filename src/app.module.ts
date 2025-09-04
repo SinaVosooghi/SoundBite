@@ -21,7 +21,6 @@ import { CacheModule } from './cache/cache.module';
   providers: [
     AppService,
     IdempotencyMiddleware,
-    SecurityMiddleware,
     {
       provide: APP_FILTER,
       useClass: HttpExceptionFilter,
