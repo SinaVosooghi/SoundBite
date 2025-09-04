@@ -29,43 +29,54 @@ export class SoundbiteService {
     private readonly configService: ConfigService,
     private readonly validationService: ValidationService,
   ) {
-    // Use environment-aware configuration
-    const awsConfig: AWSConfig = {
-      region: this.envConfig.aws.region,
-    };
-
-    // Add LocalStack specific configuration
-    if (
-      isLocalStack() &&
-      this.envConfig.aws.endpoint !== undefined &&
-      this.envConfig.aws.endpoint !== null &&
-      this.envConfig.aws.endpoint.length > 0 &&
-      this.envConfig.aws.credentials
-    ) {
-      awsConfig.endpoint = this.envConfig.aws.endpoint;
-      awsConfig.credentials = {
-        accessKeyId: this.envConfig.aws.credentials.accessKeyId ?? 'test',
-        secretAccessKey:
-          this.envConfig.aws.credentials.secretAccessKey ?? 'test',
+    try {
+      // Use environment-aware configuration
+      const awsConfig: AWSConfig = {
+        region: this.envConfig.aws.region,
       };
-      awsConfig.forcePathStyle = true;
-    } else {
-      // For production/staging: Use default credential provider chain (EC2 instance role)
-      // The AWS SDK will automatically detect and use EC2 instance role credentials
+
+      // Add LocalStack specific configuration
+      if (
+        isLocalStack() &&
+        this.envConfig.aws.endpoint !== undefined &&
+        this.envConfig.aws.endpoint !== null &&
+        this.envConfig.aws.endpoint.length > 0 &&
+        this.envConfig.aws.credentials
+      ) {
+        awsConfig.endpoint = this.envConfig.aws.endpoint;
+        awsConfig.credentials = {
+          accessKeyId: this.envConfig.aws.credentials.accessKeyId ?? 'test',
+          secretAccessKey:
+            this.envConfig.aws.credentials.secretAccessKey ?? 'test',
+        };
+        awsConfig.forcePathStyle = true;
+      } else {
+        // For production/staging: Use default credential provider chain (EC2 instance role)
+        // The AWS SDK will automatically detect and use EC2 instance role credentials
+        this.logger.log(
+          'Using AWS default credential provider chain (EC2 instance role)',
+        );
+      }
+
       this.logger.log(
-        'Using AWS default credential provider chain (EC2 instance role)',
+        `Initializing AWS services for environment: ${this.envConfig.name}`,
       );
+      this.logger.log(
+        `Using endpoint: ${isLocalStack() ? this.envConfig.aws.endpoint : 'AWS default'}`,
+      );
+
+      this.sqs = new SQSClient(awsConfig);
+      this.dynamo = new DynamoDBClient(awsConfig);
+    } catch (error) {
+      this.logger.warn(
+        `Failed to initialize AWS services: ${error instanceof Error ? error.message : String(error)}`,
+      );
+      this.logger.warn('Application will start but AWS features may not work');
+      
+      // Create dummy clients to prevent null reference errors
+      this.sqs = {} as SQSClient;
+      this.dynamo = {} as DynamoDBClient;
     }
-
-    this.logger.log(
-      `Initializing AWS services for environment: ${this.envConfig.name}`,
-    );
-    this.logger.log(
-      `Using endpoint: ${isLocalStack() ? this.envConfig.aws.endpoint : 'AWS default'}`,
-    );
-
-    this.sqs = new SQSClient(awsConfig);
-    this.dynamo = new DynamoDBClient(awsConfig);
   }
 
   async createSoundbite(

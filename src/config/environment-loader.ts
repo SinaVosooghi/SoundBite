@@ -79,6 +79,32 @@ export class EnvironmentLoader {
     const nodeEnv = process.env.NODE_ENV ?? 'development';
     const awsConnectionMode = process.env.AWS_CONNECTION_MODE ?? 'localstack';
 
+    // Check if running in Docker test environment
+    if (nodeEnv === 'test') {
+      return {
+        name: 'test',
+        port: 3000,
+        aws: {
+          region: 'us-east-1',
+          credentials: {
+            accessKeyId: 'test',
+            secretAccessKey: 'test',
+          },
+        },
+        services: {
+          dynamodb: {
+            tableName: 'test-table',
+          },
+          s3: {
+            bucketName: 'test-bucket',
+          },
+          sqs: {
+            queueUrl: 'http://localhost:4566/test-queue',
+          },
+        },
+      };
+    }
+
     // Check if running in Docker (EC2)
     if (
       process.env.ENVIRONMENT !== undefined &&
