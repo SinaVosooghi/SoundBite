@@ -1,0 +1,55 @@
+name: Test OIDC Environment
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to test'
+        required: true
+        type: choice
+        options:
+          - dev
+          - production
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  test-oidc-env:
+    name: Test OIDC with Environment
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.environment }}
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Test OIDC token generation
+      run: |
+        echo "Testing OIDC token generation with environment context..."
+        
+        # Test if we can get the OIDC token
+        TOKEN=$(curl -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=sts.amazonaws.com" | jq -r .value)
+        
+        if [ "$TOKEN" != "null" ] && [ -n "$TOKEN" ]; then
+          echo "✅ OIDC token generated successfully"
+          echo "Token length: ${#TOKEN}"
+        else
+          echo "❌ Failed to generate OIDC token"
+          exit 1
+        fi
+        
+    - name: Test AWS STS call
+      run: |
+        echo "Testing AWS STS assume-role-with-web-identity..."
+        
+        # Get the OIDC token
+        TOKEN=$(curl -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=sts.amazonaws.com" | jq -r .value)
+        
+        # Test STS call (this will fail but we can see the error)
+        aws sts assume-role-with-web-identity \
+          --role-arn arn:aws:iam::123456789012:role/test-role \
+          --web-identity-token $TOKEN \
+          --role-session-name test-session \
+          --region us-east-1 || echo "Expected failure - role doesn't exist"
