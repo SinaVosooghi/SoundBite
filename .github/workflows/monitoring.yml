@@ -77,7 +77,7 @@ jobs:
           # Get API instance info from CloudFormation outputs
           API_INSTANCE_ID=$(aws cloudformation describe-stacks \
             --stack-name SoundBite-dev-API \
-            --query 'Stacks[0].Outputs[?OutputKey==`ApiInstanceId`].OutputValue' \
+            --query "Stacks[0].Outputs[?OutputKey=='ApiInstanceId'].OutputValue" \
             --output text)
 
           if [ -z "$API_INSTANCE_ID" ]; then
