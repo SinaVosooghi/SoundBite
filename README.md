@@ -268,4 +268,4 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 <div align="center">
   <strong>Built with ❤️ using TypeScript, NestJS, and AWS</strong>
-</div>
+</div># Test trigger
