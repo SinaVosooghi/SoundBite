@@ -21,7 +21,7 @@ jobs:
   deploy:
     name: Deploy to Development
     runs-on: ubuntu-latest
-    environment: dev
+    # environment: dev  # Temporarily disabled due to OIDC environment issue
     timeout-minutes: 30
     
     steps:
@@ -43,11 +43,33 @@ jobs:
     - name: Install dependencies
       run: yarn install --immutable
       
-    - name: Configure AWS credentials (OIDC)
-      uses: aws-actions/configure-aws-credentials@v4
-      with:
-        role-to-assume: arn:aws:iam::${{ env.AWS_ACCOUNT_ID }}:role/GitHubActions-SoundBite-Dev
-        aws-region: ${{ env.AWS_REGION }}
+    - name: Configure AWS credentials (OIDC via CLI)
+      run: |
+        echo "🔍 Configuring AWS credentials via OIDC..."
+        
+        # Get the OIDC token
+        TOKEN=$(curl -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=sts.amazonaws.com" | jq -r .value)
+        
+        # Assume the role
+        CREDS=$(aws sts assume-role-with-web-identity \
+          --role-arn arn:aws:iam::${{ env.AWS_ACCOUNT_ID }}:role/GitHubActions-SoundBite-Dev \
+          --web-identity-token $TOKEN \
+          --role-session-name github-actions-deploy \
+          --region ${{ env.AWS_REGION }} \
+          --output json)
+        
+        # Extract credentials
+        ACCESS_KEY=$(echo $CREDS | jq -r '.Credentials.AccessKeyId')
+        SECRET_KEY=$(echo $CREDS | jq -r '.Credentials.SecretAccessKey')
+        SESSION_TOKEN=$(echo $CREDS | jq -r '.Credentials.SessionToken')
+        
+        # Set environment variables
+        echo "AWS_ACCESS_KEY_ID=$ACCESS_KEY" >> $GITHUB_ENV
+        echo "AWS_SECRET_ACCESS_KEY=$SECRET_KEY" >> $GITHUB_ENV
+        echo "AWS_SESSION_TOKEN=$SESSION_TOKEN" >> $GITHUB_ENV
+        echo "AWS_DEFAULT_REGION=${{ env.AWS_REGION }}" >> $GITHUB_ENV
+        
+        echo "✅ AWS credentials configured successfully!"
         
     - name: Verify AWS credentials
       run: |
