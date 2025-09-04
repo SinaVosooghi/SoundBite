@@ -78,12 +78,12 @@ export class SoundbiteService {
         send: () => {
           throw new Error('AWS services not available in test environment');
         },
-      } as SQSClient;
+      } as unknown as SQSClient;
       this.dynamo = {
         send: () => {
           throw new Error('AWS services not available in test environment');
         },
-      } as DynamoDBClient;
+      } as unknown as DynamoDBClient;
     }
   }
 
