@@ -1,7 +1,7 @@
 module.exports = {
   moduleFileExtensions: ['js', 'json', 'ts'],
-  rootDir: 'src',
-  testRegex: '.*\\.spec\\.ts$',
+  rootDir: '.',
+  testRegex: 'src/.*\\.spec\\.ts$',
   transform: {
     '^.+\\.(t|j)s$': 'ts-jest',
   },
@@ -15,7 +15,7 @@ module.exports = {
     '!**/coverage/**',
     '!main.ts',
   ],
-  coverageDirectory: '../coverage',
+  coverageDirectory: 'coverage',
   testEnvironment: 'node',
   coverageReporters: ['text', 'lcov', 'html'],
   coverageThreshold: {
@@ -26,7 +26,7 @@ module.exports = {
       statements: 80,
     },
   },
-  setupFilesAfterEnv: ['<rootDir>/../test/setup.ts'],
+  setupFilesAfterEnv: ['<rootDir>/test/setup.ts'],
   testTimeout: 30000,
   verbose: true,
   detectOpenHandles: true,
