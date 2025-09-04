@@ -32,7 +32,7 @@ jobs:
   health-check:
     name: Health Check
     runs-on: ubuntu-latest
-    if: github.event.inputs.check_type == 'all' || github.event.inputs.check_type == 'health' || github.event_name == 'schedule'
+    if: false  # Disabled until AWS credentials are configured
     environment: ${{ github.event.inputs.environment || 'production' }}
     
     steps:
@@ -155,7 +155,7 @@ jobs:
   performance-monitoring:
     name: Performance Monitoring
     runs-on: ubuntu-latest
-    if: github.event.inputs.check_type == 'all' || github.event.inputs.check_type == 'performance'
+    if: false  # Disabled until AWS credentials are configured
     environment: ${{ github.event.inputs.environment || 'production' }}
     
     steps:
@@ -229,7 +229,7 @@ jobs:
   security-monitoring:
     name: Security Monitoring
     runs-on: ubuntu-latest
-    if: github.event.inputs.check_type == 'all' || github.event.inputs.check_type == 'security'
+    if: false  # Disabled until AWS credentials are configured
     environment: ${{ github.event.inputs.environment || 'production' }}
     
     steps:
