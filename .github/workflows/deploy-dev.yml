@@ -98,9 +98,9 @@ jobs:
         name: deployment-outputs-dev
         path: cdk/deployment-outputs.json
         
-    - name: Notify deployment success
-      run: |
-        echo "✅ Development deployment completed successfully!"
-        echo "Stack: $CDK_STACKS"
-        echo "Region: ${{ env.AWS_REGION }}"
-        echo "Account: ${{ env.AWS_ACCOUNT_ID }}"
+    # - name: Notify deployment success
+    #   run: |
+    #     echo "✅ Development deployment completed successfully!"
+    #     echo "Stack: $CDK_STACKS"
+    #     echo "Region: ${{ env.AWS_REGION }}"
+    #     echo "Account: ${{ env.AWS_ACCOUNT_ID }}"

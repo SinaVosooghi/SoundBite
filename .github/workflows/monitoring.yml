@@ -79,13 +79,13 @@ jobs:
             --stack-name SoundBite-dev-API \
             --query "Stacks[0].Outputs[?OutputKey=='ApiInstanceId'].OutputValue" \
             --output text)
-
+          
           if [ -z "$API_INSTANCE_ID" ]; then
             echo "❌ Could not retrieve API instance ID"
             echo "status=failed" >> $GITHUB_OUTPUT
             exit 1
           fi
-
+          
           echo "Checking API instance: $API_INSTANCE_ID"
 
           # Check if EC2 instance is running
@@ -370,41 +370,41 @@ jobs:
     if: always() && (needs.health-check.result == 'failure' || needs.performance-monitoring.result == 'failure' || needs.security-monitoring.result == 'failure')
     
     steps:
-      - name: Send Slack notification
-        if: env.SLACK_WEBHOOK_URL != ''
-        run: |
-          ENVIRONMENT="${{ github.event.inputs.environment || 'dev' }}"
-          
-          # Determine which checks failed
-          FAILED_CHECKS=""
-          if [ "${{ needs.health-check.result }}" = "failure" ]; then
-            FAILED_CHECKS="$FAILED_CHECKS Health Check,"
-          fi
-          if [ "${{ needs.performance-monitoring.result }}" = "failure" ]; then
-            FAILED_CHECKS="$FAILED_CHECKS Performance Monitoring,"
-          fi
-          if [ "${{ needs.security-monitoring.result }}" = "failure" ]; then
-            FAILED_CHECKS="$FAILED_CHECKS Security Monitoring,"
-          fi
-          
-          # Remove trailing comma
-          FAILED_CHECKS=${FAILED_CHECKS%,}
-          
-          curl -X POST -H 'Content-type: application/json' \
-            --data "{
-              \"text\": \"🚨 SoundBite Monitoring Alert\",
-              \"attachments\": [{
-                \"color\": \"danger\",
-                \"fields\": [
-                  {\"title\": \"Environment\", \"value\": \"$ENVIRONMENT\", \"short\": true},
-                  {\"title\": \"Failed Checks\", \"value\": \"$FAILED_CHECKS\", \"short\": true},
-                  {\"title\": \"Workflow\", \"value\": \"<${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|View Details>\", \"short\": false}
-                ]
-              }]
-            }" \
-            ${{ env.SLACK_WEBHOOK_URL }}
-        env:
-          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+      # - name: Send Slack notification
+      #   if: env.SLACK_WEBHOOK_URL != ''
+      #   run: |
+      #     ENVIRONMENT="${{ github.event.inputs.environment || 'dev' }}"
+      #     
+      #     # Determine which checks failed
+      #     FAILED_CHECKS=""
+      #     if [ "${{ needs.health-check.result }}" = "failure" ]; then
+      #       FAILED_CHECKS="$FAILED_CHECKS Health Check,"
+      #     fi
+      #     if [ "${{ needs.performance-monitoring.result }}" = "failure" ]; then
+      #       FAILED_CHECKS="$FAILED_CHECKS Performance Monitoring,"
+      #     fi
+      #     if [ "${{ needs.security-monitoring.result }}" = "failure" ]; then
+      #       FAILED_CHECKS="$FAILED_CHECKS Security Monitoring,"
+      #     fi
+      #     
+      #     # Remove trailing comma
+      #     FAILED_CHECKS=${FAILED_CHECKS%,}
+      #     
+      #     curl -X POST -H 'Content-type: application/json' \
+      #       --data "{
+      #         \"text\": \"🚨 SoundBite Monitoring Alert\",
+      #         \"attachments\": [{
+      #           \"color\": \"danger\",
+      #           \"fields\": [
+      #             {\"title\": \"Environment\", \"value\": \"$ENVIRONMENT\", \"short\": true},
+      #             {\"title\": \"Failed Checks\", \"value\": \"$FAILED_CHECKS\", \"short\": true},
+      #             {\"title\": \"Workflow\", \"value\": \"<${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|View Details>\", \"short\": false}
+      #           ]
+      #         }]
+      #       }" \
+      #       ${{ env.SLACK_WEBHOOK_URL }}
+      #   env:
+      #     SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
 
       - name: Create GitHub issue
         if: github.event_name == 'schedule'
