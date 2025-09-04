@@ -119,7 +119,6 @@ localstack-data/
 # Documentation
 *.md
 !README.md
-!docs/*.md
 
 # Scripts
 /scripts/
