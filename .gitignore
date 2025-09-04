@@ -112,7 +112,8 @@ localstack-data/
 # Test files
 /test/
 !test/setup.ts
-**/*.spec.ts
+# Allow spec files for testing
+# **/*.spec.ts
 **/*.test.ts
 
 # Documentation
