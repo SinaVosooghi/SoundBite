@@ -30,12 +30,15 @@ describe('SoundbiteService', () => {
         {
           provide: ConfigService,
           useValue: {
-            get: jest.fn().mockReturnValue({
-              aws: { region: 'us-east-1' },
-              services: {
-                dynamodb: { tableName: 'SoundbiteTable' },
-                sqs: { queueUrl: 'https://sqs-url' },
-              },
+            get: jest.fn((key: string) => {
+              const config = {
+                NODE_ENV: 'development',
+                AWS_REGION: 'us-east-1',
+                AWS_ACCESS_KEY_ID: 'test',
+                AWS_SECRET_ACCESS_KEY: 'test',
+                AWS_ENDPOINT: 'http://localhost:4566',
+              };
+              return config[key];
             }),
           },
         },
@@ -159,7 +162,7 @@ describe('SoundbiteService', () => {
         url: 'http://localhost:4566/soundbitesbucket/soundbites/test-id-123.mp3',
         createdAt: '2025-01-24T10:00:00.000Z',
         updatedAt: '2025-01-24T10:01:00.000Z',
-        environment: 'test',
+        environment: 'development-localstack',
       });
 
       expect(dynamoMock.commandCalls(GetItemCommand)).toHaveLength(1);
@@ -212,7 +215,7 @@ describe('SoundbiteService', () => {
         status: 'pending',
         createdAt: '2025-01-24T10:00:00.000Z',
         updatedAt: '2025-01-24T10:00:00.000Z',
-        environment: 'test',
+        environment: 'development-localstack',
       });
       expect(result.s3Key).toBeUndefined();
       expect(result.url).toBeUndefined();
