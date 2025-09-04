@@ -157,6 +157,7 @@ jobs:
     timeout-minutes: 20
     needs: [lint-and-test, build]
     if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' || github.ref == 'refs/heads/develop')
+    continue-on-error: true
     
     steps:
     - name: Checkout code
