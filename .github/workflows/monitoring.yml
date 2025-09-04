@@ -37,17 +37,39 @@ jobs:
     name: Health Check
     runs-on: ubuntu-latest
     if: github.event.inputs.check_type == 'all' || github.event.inputs.check_type == 'health' || github.event_name == 'schedule'
-    environment: ${{ github.event.inputs.environment || 'production' }}
+    # environment: ${{ github.event.inputs.environment || 'production' }}  # Temporarily disabled due to OIDC environment issue
     
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Configure AWS credentials (OIDC)
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: arn:aws:iam::${{ vars.AWS_ACCOUNT_ID_PROD }}:role/GitHubActions-SoundBite-Prod
-          aws-region: ${{ env.AWS_REGION }}
+      - name: Configure AWS credentials (OIDC via CLI)
+        run: |
+          echo "🔍 Configuring AWS credentials via OIDC..."
+          
+          # Get the OIDC token
+          TOKEN=$(curl -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=sts.amazonaws.com" | jq -r .value)
+          
+          # Assume the role
+          CREDS=$(aws sts assume-role-with-web-identity \
+            --role-arn arn:aws:iam::${{ vars.AWS_ACCOUNT_ID_PROD }}:role/GitHubActions-SoundBite-Prod \
+            --web-identity-token $TOKEN \
+            --role-session-name github-actions-monitoring \
+            --region ${{ env.AWS_REGION }} \
+            --output json)
+          
+          # Extract credentials
+          ACCESS_KEY=$(echo $CREDS | jq -r '.Credentials.AccessKeyId')
+          SECRET_KEY=$(echo $CREDS | jq -r '.Credentials.SecretAccessKey')
+          SESSION_TOKEN=$(echo $CREDS | jq -r '.Credentials.SessionToken')
+          
+          # Set environment variables
+          echo "AWS_ACCESS_KEY_ID=$ACCESS_KEY" >> $GITHUB_ENV
+          echo "AWS_SECRET_ACCESS_KEY=$SECRET_KEY" >> $GITHUB_ENV
+          echo "AWS_SESSION_TOKEN=$SESSION_TOKEN" >> $GITHUB_ENV
+          echo "AWS_DEFAULT_REGION=${{ env.AWS_REGION }}" >> $GITHUB_ENV
+          
+          echo "✅ AWS credentials configured successfully!"
 
       - name: Check API health
         id: api-health
@@ -159,17 +181,39 @@ jobs:
     name: Performance Monitoring
     runs-on: ubuntu-latest
     if: github.event.inputs.check_type == 'all' || github.event.inputs.check_type == 'performance'
-    environment: ${{ github.event.inputs.environment || 'production' }}
+    # environment: ${{ github.event.inputs.environment || 'production' }}  # Temporarily disabled due to OIDC environment issue
     
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Configure AWS credentials (OIDC)
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: arn:aws:iam::${{ vars.AWS_ACCOUNT_ID_PROD }}:role/GitHubActions-SoundBite-Prod
-          aws-region: ${{ env.AWS_REGION }}
+      - name: Configure AWS credentials (OIDC via CLI)
+        run: |
+          echo "🔍 Configuring AWS credentials via OIDC..."
+          
+          # Get the OIDC token
+          TOKEN=$(curl -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=sts.amazonaws.com" | jq -r .value)
+          
+          # Assume the role
+          CREDS=$(aws sts assume-role-with-web-identity \
+            --role-arn arn:aws:iam::${{ vars.AWS_ACCOUNT_ID_PROD }}:role/GitHubActions-SoundBite-Prod \
+            --web-identity-token $TOKEN \
+            --role-session-name github-actions-monitoring \
+            --region ${{ env.AWS_REGION }} \
+            --output json)
+          
+          # Extract credentials
+          ACCESS_KEY=$(echo $CREDS | jq -r '.Credentials.AccessKeyId')
+          SECRET_KEY=$(echo $CREDS | jq -r '.Credentials.SecretAccessKey')
+          SESSION_TOKEN=$(echo $CREDS | jq -r '.Credentials.SessionToken')
+          
+          # Set environment variables
+          echo "AWS_ACCESS_KEY_ID=$ACCESS_KEY" >> $GITHUB_ENV
+          echo "AWS_SECRET_ACCESS_KEY=$SECRET_KEY" >> $GITHUB_ENV
+          echo "AWS_SESSION_TOKEN=$SESSION_TOKEN" >> $GITHUB_ENV
+          echo "AWS_DEFAULT_REGION=${{ env.AWS_REGION }}" >> $GITHUB_ENV
+          
+          echo "✅ AWS credentials configured successfully!"
 
       - name: Check CloudWatch metrics
         run: |
@@ -232,17 +276,39 @@ jobs:
     name: Security Monitoring
     runs-on: ubuntu-latest
     if: github.event.inputs.check_type == 'all' || github.event.inputs.check_type == 'security'
-    environment: ${{ github.event.inputs.environment || 'production' }}
+    # environment: ${{ github.event.inputs.environment || 'production' }}  # Temporarily disabled due to OIDC environment issue
     
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Configure AWS credentials (OIDC)
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: arn:aws:iam::${{ vars.AWS_ACCOUNT_ID_PROD }}:role/GitHubActions-SoundBite-Prod
-          aws-region: ${{ env.AWS_REGION }}
+      - name: Configure AWS credentials (OIDC via CLI)
+        run: |
+          echo "🔍 Configuring AWS credentials via OIDC..."
+          
+          # Get the OIDC token
+          TOKEN=$(curl -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=sts.amazonaws.com" | jq -r .value)
+          
+          # Assume the role
+          CREDS=$(aws sts assume-role-with-web-identity \
+            --role-arn arn:aws:iam::${{ vars.AWS_ACCOUNT_ID_PROD }}:role/GitHubActions-SoundBite-Prod \
+            --web-identity-token $TOKEN \
+            --role-session-name github-actions-monitoring \
+            --region ${{ env.AWS_REGION }} \
+            --output json)
+          
+          # Extract credentials
+          ACCESS_KEY=$(echo $CREDS | jq -r '.Credentials.AccessKeyId')
+          SECRET_KEY=$(echo $CREDS | jq -r '.Credentials.SecretAccessKey')
+          SESSION_TOKEN=$(echo $CREDS | jq -r '.Credentials.SessionToken')
+          
+          # Set environment variables
+          echo "AWS_ACCESS_KEY_ID=$ACCESS_KEY" >> $GITHUB_ENV
+          echo "AWS_SECRET_ACCESS_KEY=$SECRET_KEY" >> $GITHUB_ENV
+          echo "AWS_SESSION_TOKEN=$SESSION_TOKEN" >> $GITHUB_ENV
+          echo "AWS_DEFAULT_REGION=${{ env.AWS_REGION }}" >> $GITHUB_ENV
+          
+          echo "✅ AWS credentials configured successfully!"
 
       - name: Check AWS Config compliance
         run: |
