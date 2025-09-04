@@ -201,6 +201,9 @@ jobs:
         docker run -d --name test-api -p 3000:3000 \
           -e NODE_ENV=test \
           -e AWS_REGION=us-east-1 \
+          -e AWS_ACCESS_KEY_ID=test \
+          -e AWS_SECRET_ACCESS_KEY=test \
+          -e AWS_ENDPOINT=http://localhost:4566 \
           soundbite-test:latest
         sleep 15
         
