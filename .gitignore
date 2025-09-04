@@ -3,7 +3,7 @@ node_modules/
 **/node_modules/
 
 # Yarn
-.yarn/
+# .yarn/
 .yarnrc.yml
 .yarn-integrity
 
