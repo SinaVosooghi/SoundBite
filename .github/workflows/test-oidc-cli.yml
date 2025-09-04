@@ -30,11 +30,10 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
       
-    - name: Install AWS CLI
+    - name: Check AWS CLI
       run: |
-        curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
-        unzip awscliv2.zip
-        sudo ./aws/install
+        echo "🔍 Checking AWS CLI version..."
+        aws --version
         
     - name: Configure AWS credentials (OIDC via CLI)
       run: |
