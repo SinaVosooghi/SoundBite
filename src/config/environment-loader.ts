@@ -80,7 +80,7 @@ export class EnvironmentLoader {
     const awsConnectionMode = process.env.AWS_CONNECTION_MODE ?? 'localstack';
 
     // Check if running in Docker test environment (but not in CI)
-    if (nodeEnv === 'test' && !process.env.CI) {
+    if (nodeEnv === 'test' && process.env.CI !== 'true') {
       return {
         name: 'test',
         port: 3000,
