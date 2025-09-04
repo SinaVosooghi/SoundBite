@@ -26,29 +26,12 @@ print_header() {
     echo -e "${BLUE}=== Environment Promotion Tool ===${NC}"
 }
 
-# Environment definitions
-declare -A ENVIRONMENTS=(
-    ["dev-localstack"]="LocalStack + Local NestJS"
-    ["dev-aws"]="AWS + Local NestJS"
-    ["dev-aws-deployed"]="AWS + AWS NestJS"
-    ["staging"]="AWS + AWS NestJS (Staging)"
-    ["production"]="AWS + AWS NestJS (Production)"
-)
-
-# Promotion flow
-declare -A PROMOTION_FLOW=(
-    ["dev-localstack"]="dev-aws"
-    ["dev-aws"]="dev-aws-deployed"
-    ["dev-aws-deployed"]="staging"
-    ["staging"]="production"
-)
-
-# Validation functions
+# Environment validation functions
 validate_environment() {
     local env=$1
     print_status "Validating $env environment..."
     
-    case $env in
+    case "$env" in
         "dev-localstack")
             # Check if LocalStack is running
             if ! localstack status | grep -q "Runtime status.*running"; then
@@ -101,7 +84,7 @@ check_health() {
     local env=$1
     print_status "Checking health of $env environment..."
     
-    case $env in
+    case "$env" in
         "dev-localstack")
             # Check if local application is responding
             if curl -f http://localhost:3000/health >/dev/null 2>&1; then
@@ -264,27 +247,37 @@ promote_environment() {
     print_status "Promoting from $from_env to $to_env"
     
     # Validate promotion flow
-    if [ "${PROMOTION_FLOW[$from_env]}" != "$to_env" ]; then
-        print_error "Invalid promotion flow: $from_env -> $to_env"
-        print_error "Valid flows:"
-        for from in "${!PROMOTION_FLOW[@]}"; do
-            echo "  $from -> ${PROMOTION_FLOW[$from]}"
-        done
-        return 1
-    fi
-    
-    # Execute promotion
     case "$from_env" in
         "dev-localstack")
+            if [ "$to_env" != "dev-aws" ]; then
+                print_error "Invalid promotion flow: $from_env -> $to_env"
+                print_error "Valid flow: dev-localstack -> dev-aws"
+                return 1
+            fi
             promote_to_dev_aws
             ;;
         "dev-aws")
+            if [ "$to_env" != "dev-aws-deployed" ]; then
+                print_error "Invalid promotion flow: $from_env -> $to_env"
+                print_error "Valid flow: dev-aws -> dev-aws-deployed"
+                return 1
+            fi
             promote_to_dev_aws_deployed
             ;;
         "dev-aws-deployed")
+            if [ "$to_env" != "staging" ]; then
+                print_error "Invalid promotion flow: $from_env -> $to_env"
+                print_error "Valid flow: dev-aws-deployed -> staging"
+                return 1
+            fi
             promote_to_staging
             ;;
         "staging")
+            if [ "$to_env" != "production" ]; then
+                print_error "Invalid promotion flow: $from_env -> $to_env"
+                print_error "Valid flow: staging -> production"
+                return 1
+            fi
             promote_to_production
             ;;
         *)
@@ -319,14 +312,17 @@ show_help() {
     echo "  health <env>         - Check environment health"
     echo ""
     echo "Environments:"
-    for env in "${!ENVIRONMENTS[@]}"; do
-        echo "  $env: ${ENVIRONMENTS[$env]}"
-    done
+    echo "  dev-localstack: LocalStack + Local NestJS"
+    echo "  dev-aws: AWS + Local NestJS"
+    echo "  dev-aws-deployed: AWS + AWS NestJS"
+    echo "  staging: AWS + AWS NestJS (Staging)"
+    echo "  production: AWS + AWS NestJS (Production)"
     echo ""
     echo "Valid promotion flows:"
-    for from in "${!PROMOTION_FLOW[@]}"; do
-        echo "  $from -> ${PROMOTION_FLOW[$from]}"
-    done
+    echo "  dev-localstack -> dev-aws"
+    echo "  dev-aws -> dev-aws-deployed"
+    echo "  dev-aws-deployed -> staging"
+    echo "  staging -> production"
     echo ""
     echo "Examples:"
     echo "  $0 promote dev-localstack dev-aws"
