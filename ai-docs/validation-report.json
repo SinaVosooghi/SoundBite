@@ -1,0 +1,13 @@
+{
+  "timestamp": "2025-09-04T16:05:55.542Z",
+  "totalFiles": 17,
+  "validFiles": 17,
+  "invalidFiles": 0,
+  "issues": [],
+  "summary": {
+    "overallHealth": 1,
+    "criticalIssues": 0,
+    "contentIssues": 0,
+    "structureIssues": 0
+  }
+}

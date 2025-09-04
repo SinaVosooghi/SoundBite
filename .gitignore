@@ -119,9 +119,12 @@ localstack-data/
 # Documentation
 *.md
 !README.md
+!docs/*.md
+!ai-docs/**/*.md
+!human-docs/**/*.md
 
-# Scripts
-/scripts/
+# Scripts (allow documentation scripts)
+# /scripts/
 
 # CDK
 /cdk/cdk.out/
