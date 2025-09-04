@@ -159,7 +159,7 @@ describe('SoundbiteService', () => {
         url: 'http://localhost:4566/soundbitesbucket/soundbites/test-id-123.mp3',
         createdAt: '2025-01-24T10:00:00.000Z',
         updatedAt: '2025-01-24T10:01:00.000Z',
-        environment: 'development-localstack',
+        environment: 'test',
       });
 
       expect(dynamoMock.commandCalls(GetItemCommand)).toHaveLength(1);
@@ -212,7 +212,7 @@ describe('SoundbiteService', () => {
         status: 'pending',
         createdAt: '2025-01-24T10:00:00.000Z',
         updatedAt: '2025-01-24T10:00:00.000Z',
-        environment: 'development-localstack',
+        environment: 'test',
       });
       expect(result.s3Key).toBeUndefined();
       expect(result.url).toBeUndefined();
