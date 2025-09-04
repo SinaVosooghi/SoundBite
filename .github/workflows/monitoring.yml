@@ -37,7 +37,7 @@ jobs:
     name: Health Check
     runs-on: ubuntu-latest
     if: github.event.inputs.check_type == 'all' || github.event.inputs.check_type == 'health' || github.event_name == 'schedule'
-    # environment: ${{ github.event.inputs.environment || 'production' }}  # Temporarily disabled due to OIDC environment issue
+    # environment: ${{ github.event.inputs.environment || 'dev' }}  # Temporarily disabled due to OIDC environment issue
     
     steps:
       - name: Checkout code
@@ -76,7 +76,7 @@ jobs:
         run: |
           # Get API endpoint from CloudFormation outputs
           API_ENDPOINT=$(aws cloudformation describe-stacks \
-            --stack-name SoundBite-API \
+            --stack-name SoundBite-dev-API \
             --query 'Stacks[0].Outputs[?OutputKey==`ApiEndpoint`].OutputValue' \
             --output text)
           
@@ -105,7 +105,7 @@ jobs:
       - name: Check DynamoDB table
         id: dynamodb-health
         run: |
-          TABLE_NAME="SoundBite-${{ github.event.inputs.environment || 'production' }}-SoundbitesTable"
+          TABLE_NAME="SoundBite-${{ github.event.inputs.environment || 'dev' }}-SoundbitesTable"
           
           TABLE_STATUS=$(aws dynamodb describe-table \
             --table-name "$TABLE_NAME" \
@@ -124,7 +124,7 @@ jobs:
       - name: Check S3 bucket
         id: s3-health
         run: |
-          BUCKET_NAME="soundbite-${{ github.event.inputs.environment || 'production' }}-soundbites"
+          BUCKET_NAME="soundbite-${{ github.event.inputs.environment || 'dev' }}-soundbites"
           
           if aws s3 ls "s3://$BUCKET_NAME" >/dev/null 2>&1; then
             echo "✅ S3 bucket is accessible"
@@ -139,7 +139,7 @@ jobs:
         id: sqs-health
         run: |
           QUEUE_URL=$(aws sqs get-queue-url \
-            --queue-name "SoundBite-${{ github.event.inputs.environment || 'production' }}-Queue" \
+            --queue-name "SoundBite-${{ github.event.inputs.environment || 'dev' }}-Queue" \
             --query 'QueueUrl' \
             --output text 2>/dev/null || echo "NOT_FOUND")
           
@@ -161,7 +161,7 @@ jobs:
       - name: Check Lambda function
         id: lambda-health
         run: |
-          FUNCTION_NAME="SoundBite-${{ github.event.inputs.environment || 'production' }}-Processor"
+          FUNCTION_NAME="SoundBite-${{ github.event.inputs.environment || 'dev' }}-Processor"
           
           FUNCTION_STATUS=$(aws lambda get-function \
             --function-name "$FUNCTION_NAME" \
@@ -181,7 +181,7 @@ jobs:
     name: Performance Monitoring
     runs-on: ubuntu-latest
     if: github.event.inputs.check_type == 'all' || github.event.inputs.check_type == 'performance'
-    # environment: ${{ github.event.inputs.environment || 'production' }}  # Temporarily disabled due to OIDC environment issue
+    # environment: ${{ github.event.inputs.environment || 'dev' }}  # Temporarily disabled due to OIDC environment issue
     
     steps:
       - name: Checkout code
@@ -235,7 +235,7 @@ jobs:
           aws cloudwatch get-metric-statistics \
             --namespace AWS/Lambda \
             --metric-name Duration \
-            --dimensions Name=FunctionName,Value=SoundBite-${{ github.event.inputs.environment || 'production' }}-Processor \
+            --dimensions Name=FunctionName,Value=SoundBite-${{ github.event.inputs.environment || 'dev' }}-Processor \
             --start-time $(date -u -d '1 hour ago' +%Y-%m-%dT%H:%M:%S) \
             --end-time $(date -u +%Y-%m-%dT%H:%M:%S) \
             --period 300 \
@@ -248,7 +248,7 @@ jobs:
           aws cloudwatch get-metric-statistics \
             --namespace AWS/DynamoDB \
             --metric-name ConsumedReadCapacityUnits \
-            --dimensions Name=TableName,Value=SoundBite-${{ github.event.inputs.environment || 'production' }}-SoundbitesTable \
+            --dimensions Name=TableName,Value=SoundBite-${{ github.event.inputs.environment || 'dev' }}-SoundbitesTable \
             --start-time $(date -u -d '1 hour ago' +%Y-%m-%dT%H:%M:%S) \
             --end-time $(date -u +%Y-%m-%dT%H:%M:%S) \
             --period 300 \
@@ -276,7 +276,7 @@ jobs:
     name: Security Monitoring
     runs-on: ubuntu-latest
     if: github.event.inputs.check_type == 'all' || github.event.inputs.check_type == 'security'
-    # environment: ${{ github.event.inputs.environment || 'production' }}  # Temporarily disabled due to OIDC environment issue
+    # environment: ${{ github.event.inputs.environment || 'dev' }}  # Temporarily disabled due to OIDC environment issue
     
     steps:
       - name: Checkout code
@@ -361,7 +361,7 @@ jobs:
       - name: Send Slack notification
         if: env.SLACK_WEBHOOK_URL != ''
         run: |
-          ENVIRONMENT="${{ github.event.inputs.environment || 'production' }}"
+          ENVIRONMENT="${{ github.event.inputs.environment || 'dev' }}"
           
           # Determine which checks failed
           FAILED_CHECKS=""
@@ -399,7 +399,7 @@ jobs:
         uses: actions/github-script@v7
         with:
           script: |
-            const environment = '${{ github.event.inputs.environment || 'production' }}';
+            const environment = '${{ github.event.inputs.environment || 'dev' }}';
             const failedChecks = [];
             
             if ('${{ needs.health-check.result }}' === 'failure') {
