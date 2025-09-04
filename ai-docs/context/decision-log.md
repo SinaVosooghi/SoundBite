@@ -141,3 +141,83 @@
 - ✅ Living updates
 - ❌ Additional maintenance
 - ❌ More complex structure
+
+## ADR-009: Multi-Environment Deployment Strategy
+**Date**: September 2025  
+**Status**: Accepted  
+**Context**: Need comprehensive environment strategy for development, testing, and production  
+**Decision**: Implement 5-environment deployment strategy  
+**Rationale**:
+- Clear separation of concerns
+- Gradual promotion from local to production
+- Risk mitigation through staging
+- Better developer experience
+- Production safety through isolation
+
+**Consequences**:
+- ✅ Clear environment separation
+- ✅ Gradual promotion flow
+- ✅ Risk mitigation
+- ✅ Better developer experience
+- ❌ Increased complexity
+- ❌ Higher operational overhead
+
+## ADR-010: Environment Promotion Automation
+**Date**: September 2025  
+**Status**: Accepted  
+**Context**: Need automated promotion between environments  
+**Decision**: Implement automated promotion scripts with validation gates  
+**Rationale**:
+- Reduce human error
+- Ensure consistency
+- Speed up deployment process
+- Improve reliability
+- Enable rollback capabilities
+
+**Consequences**:
+- ✅ Reduced human error
+- ✅ Consistent deployments
+- ✅ Faster promotion
+- ✅ Better reliability
+- ❌ Complex automation
+- ❌ Additional maintenance
+
+## ADR-011: Environment-Specific Monitoring
+**Date**: September 2025  
+**Status**: Accepted  
+**Context**: Need environment-specific monitoring and alerting  
+**Decision**: Implement environment-specific monitoring with different thresholds  
+**Rationale**:
+- Different requirements per environment
+- Appropriate alerting levels
+- Cost optimization
+- Performance optimization
+- Security compliance
+
+**Consequences**:
+- ✅ Appropriate monitoring per environment
+- ✅ Cost optimization
+- ✅ Performance optimization
+- ✅ Security compliance
+- ❌ Complex monitoring setup
+- ❌ Multiple dashboards
+
+## ADR-012: Environment Configuration Management
+**Date**: September 2025  
+**Status**: Accepted  
+**Context**: Need centralized configuration management across environments  
+**Decision**: Implement environment-specific configuration with validation  
+**Rationale**:
+- Prevent configuration drift
+- Ensure consistency
+- Improve security
+- Enable automation
+- Reduce errors
+
+**Consequences**:
+- ✅ Configuration consistency
+- ✅ Improved security
+- ✅ Better automation
+- ✅ Reduced errors
+- ❌ Complex configuration system
+- ❌ Additional validation overhead

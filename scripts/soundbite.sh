@@ -58,6 +58,35 @@ main() {
                     export AWS_CONNECTION_MODE=aws
                     yarn start:dev
                     ;;
+                "aws-deployed")
+                    print_status "Starting dev-aws-deployed environment..."
+                    print_status "This will deploy the application to AWS and run it there"
+                    
+                    # Check if AWS credentials are configured
+                    if ! aws sts get-caller-identity >/dev/null 2>&1; then
+                        print_error "AWS credentials not configured!"
+                        echo "Please configure AWS credentials first:"
+                        echo "  aws configure"
+                        echo "  or set AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY"
+                        exit 1
+                    fi
+                    
+                    # Deploy to AWS dev environment
+                    print_status "Deploying to AWS dev environment..."
+                    cd cdk
+                    npx cdk deploy --all --context environment=development
+                    cd ..
+                    
+                    # Get the API endpoint from CDK outputs
+                    API_ENDPOINT=$(aws cloudformation describe-stacks \
+                        --stack-name SoundBite-dev-API \
+                        --query 'Stacks[0].Outputs[?OutputKey==`ApiEndpoint`].OutputValue' \
+                        --output text 2>/dev/null || echo "http://localhost:3000")
+                    
+                    print_success "Dev-aws-deployed environment is ready!"
+                    print_status "API Endpoint: $API_ENDPOINT"
+                    print_status "You can now test the deployed application"
+                    ;;
                 *)
                     print_status "Starting with LocalStack (default)..."
                     export AWS_CONNECTION_MODE=localstack
@@ -157,9 +186,10 @@ show_help() {
     echo "Usage: $0 {dev|deploy|build|status|test|cdk|help}"
     echo ""
     echo "Commands:"
-    echo "  dev [localstack|aws] - Start development environment"
+    echo "  dev [localstack|aws|aws-deployed] - Start development environment"
     echo "                         localstack: Use LocalStack (default)"
-    echo "                         aws: Use real AWS services"
+    echo "                         aws: Use real AWS services locally"
+    echo "                         aws-deployed: Deploy and run on AWS"
     echo ""
     echo "  setup-localstack      - Setup LocalStack environment"
     echo "  deploy {staging|production} - Deploy specific environment"
@@ -172,6 +202,7 @@ show_help() {
     echo "Examples:"
     echo "  $0 dev localstack     # Start dev with LocalStack"
     echo "  $0 dev aws            # Start dev with real AWS"
+    echo "  $0 dev aws-deployed   # Deploy and run on AWS"
     echo "  $0 setup-localstack   # Setup LocalStack environment"
     echo "  $0 deploy staging     # Deploy staging to AWS"
     echo "  $0 deploy production  # Deploy production to AWS"
