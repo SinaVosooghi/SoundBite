@@ -1,0 +1,145 @@
+# Node modules
+node_modules/
+**/node_modules/
+
+# Yarn
+.yarn/
+.yarnrc.yml
+.yarn-integrity
+
+# Build artifacts
+/dist/
+/build/
+/cdk/cdk.out/
+/cdk.out/
+
+# Lambda build artifacts
+/lambda/processor/*.js
+
+# Coverage
+coverage/
+**/coverage/
+*.lcov
+.nyc_output
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Runtime data
+pids
+*.pid
+*.seed
+*.pid.lock
+
+# Dependency directories
+jspm_packages/
+
+# Optional npm cache directory
+.npm
+
+# Optional eslint cache
+.eslintcache
+
+# Microbundle cache
+.rpt2_cache/
+.rts2_cache_cjs/
+.rts2_cache_es/
+.rts2_cache_umd/
+
+# Optional REPL history
+.node_repl_history
+
+# Output of 'npm pack'
+*.tgz
+
+# dotenv environment variables file
+.env
+.env.*
+
+# parcel-bundler cache
+.cache
+.parcel-cache
+
+# Next.js build output
+.next
+
+# Nuxt.js build / generate output
+.nuxt
+
+# Gatsby files
+.cache/
+public
+
+# Storybook build outputs
+.out
+.storybook-out
+
+# Temporary folders
+/tmp/
+/temp/
+
+# Editor directories and files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Git
+.git/
+.gitignore
+
+# Docker
+Dockerfile*
+docker-compose*.yml
+.dockerignore
+
+# LocalStack data
+localstack-data/
+
+# Test files
+/test/
+!test/setup.ts
+**/*.spec.ts
+**/*.test.ts
+
+# Documentation
+*.md
+!README.md
+
+# Scripts
+/scripts/
+
+# CDK
+/cdk/cdk.out/
+/cdk/coverage/
+/cdk/node_modules/
+/cdk/.yarn/
+/cdk/.DS_Store
+/cdk/.cache
+/cdk/.parcel-cache
+/cdk/.vscode/
+/cdk/.idea/
+/cdk/.nyc_output
+/cdk/.npm
+/cdk/.eslintcache
+/cdk/.node_repl_history
+/cdk/.rpt2_cache/
+/cdk/.rts2_cache_cjs/
+/cdk/.rts2_cache_es/
+/cdk/.rts2_cache_umd/
+/cdk/.git/
+/cdk/.gitignore
+cdk/dist 20.21.53/tsconfig.tsbuildinfo
