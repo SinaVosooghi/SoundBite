@@ -1,0 +1,51 @@
+# Dockerfile.production - Production environment
+FROM node:22-alpine AS production
+
+# Set production environment
+ENV NODE_ENV=production
+ENV ENVIRONMENT=production
+ENV PORT=3000
+
+# Install dependencies for production
+RUN apk add --no-cache \
+    curl \
+    && rm -rf /var/cache/apk/*
+
+# Enable Yarn 4 (Berry)
+RUN corepack enable && corepack prepare yarn@4.9.2 --activate
+
+# Create app directory
+WORKDIR /app
+
+# Copy package files
+COPY package*.json ./
+COPY yarn.lock ./
+COPY .yarnrc.yml ./
+COPY .yarn ./.yarn
+
+# Install all dependencies first (Yarn 4 syntax)
+RUN yarn install --immutable
+
+# Copy source code
+COPY . .
+
+# Build the application
+RUN yarn build
+
+# Remove development dependencies and source code (but keep .yarn for start:prod script)
+RUN rm -rf src/ test/ .nyc_output/ coverage/ .eslintcache
+
+# Create non-root user for security
+RUN addgroup -g 1001 -S nodejs
+RUN adduser -S nestjs -u 1001
+USER nestjs
+
+# Expose port
+EXPOSE 3000
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost:3000/health || exit 1
+
+# Start production server using node directly
+CMD ["node", "dist/src/main"]
