@@ -38,7 +38,7 @@ describe('SoundbiteService', () => {
                 AWS_SECRET_ACCESS_KEY: 'test',
                 AWS_ENDPOINT: 'http://localhost:4566',
               };
-              return config[key];
+              return config[key as keyof typeof config] ?? undefined;
             }),
           },
         },
