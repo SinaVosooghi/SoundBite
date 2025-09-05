@@ -9,6 +9,7 @@ export interface EnvironmentConfig {
   retentionDays: number;
   features: string[];
   description: string;
+  enableMultiEnvironment?: boolean;
 }
 
 export const environments: Record<string, EnvironmentConfig> = {
@@ -35,6 +36,7 @@ export const environments: Record<string, EnvironmentConfig> = {
     retentionDays: 30,
     features: ['basic', 'monitoring', 'testing'],
     description: 'Staging environment for testing and validation',
+    enableMultiEnvironment: true,
   },
   production: {
     name: 'production',

@@ -91,6 +91,7 @@ const apiStack = new ApiStack(
     storageBucket: storageStack.bucket,
     messageQueue: queueStack.queue,
     ecrRepository: computeStack.ecrRepository,
+    enableMultiEnvironment: environmentConfig.enableMultiEnvironment,
   },
 );
 

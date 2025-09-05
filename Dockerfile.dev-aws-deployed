@@ -1,33 +1,35 @@
 # Dockerfile.dev-aws-deployed - Development AWS Deployed Environment
-# This Dockerfile is optimized for running the application on AWS in a development context
+FROM node:22-alpine AS development
 
-# Use Node.js 22 Alpine as base image
-FROM node:22-alpine AS base
+# Set development environment
+ENV NODE_ENV=development
+ENV ENVIRONMENT=development
+ENV AWS_CONNECTION_MODE=aws
+ENV PORT=3000
 
-# Set working directory
-WORKDIR /app
-
-# Install system dependencies
+# Install dependencies for development
 RUN apk add --no-cache \
     curl \
     dumb-init \
     && rm -rf /var/cache/apk/*
 
-# Create non-root user
-RUN addgroup -g 1001 -S nodejs && \
-    adduser -S nestjs -u 1001
+# Enable Yarn 4 (Berry)
+RUN corepack enable && corepack prepare yarn@4.9.2 --activate
 
-# Use non-root user
-USER nestjs
+# Create app directory
+WORKDIR /app
 
 # Copy package files
-COPY --chown=nestjs:nodejs package.json yarn.lock .yarnrc.yml ./
+COPY package*.json ./
+COPY yarn.lock ./
+COPY .yarnrc.yml ./
+COPY .yarn ./.yarn
 
 # Install dependencies
-RUN yarn install --immutable
+RUN yarn install --frozen-lockfile
 
 # Copy source code
-COPY --chown=nestjs:nodejs . .
+COPY . .
 
 # Build the application
 RUN yarn build
@@ -39,11 +41,6 @@ EXPOSE 3000
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD curl -f http://localhost:3000/health || exit 1
 
-# Set environment variables for dev-aws-deployed
-ENV NODE_ENV=development
-ENV AWS_CONNECTION_MODE=aws
-ENV PORT=3000
-
 # Start the application
 ENTRYPOINT ["dumb-init", "--"]
-CMD ["yarn", "start:prod"]
+CMD ["yarn", "start:prod"] 
