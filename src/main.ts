@@ -9,6 +9,8 @@ async function bootstrap(): Promise<void> {
   const logger = new Logger('Bootstrap');
   const envConfig = getEnvironmentConfig();
 
+  // Test comment for pre-commit hook
+
   // Enable global validation
   app.useGlobalPipes(
     new ValidationPipe({

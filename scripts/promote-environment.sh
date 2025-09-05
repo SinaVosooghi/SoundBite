@@ -103,12 +103,34 @@ check_health() {
                 return 1
             fi
             ;;
-        "dev-aws-deployed"|"staging"|"production")
-            # Get API endpoint from CloudFormation
-            local stack_name="SoundBite-${env#dev-aws-deployed}-API"
-            if [ "$env" = "dev-aws-deployed" ]; then
-                stack_name="SoundBite-dev-API"
+        "dev-aws-deployed")
+            # Get EC2 instance details for dev environment
+            local instance_id=$(aws cloudformation describe-stacks \
+                --stack-name SoundBite-dev-API \
+                --query 'Stacks[0].Outputs[?OutputKey==`ApiInstanceId`].OutputValue' \
+                --output text 2>/dev/null || echo "")
+            
+            if [ -z "$instance_id" ]; then
+                print_error "Could not get EC2 instance ID for $env"
+                return 1
             fi
+            
+            # Check if EC2 instance is running
+            local instance_state=$(aws ec2 describe-instances \
+                --instance-ids "$instance_id" \
+                --query 'Reservations[0].Instances[0].State.Name' \
+                --output text 2>/dev/null || echo "")
+            
+            if [ "$instance_state" = "running" ]; then
+                print_success "$env EC2 instance is running (ID: $instance_id)"
+            else
+                print_error "$env EC2 instance is not running (State: $instance_state)"
+                return 1
+            fi
+            ;;
+        "staging"|"production")
+            # Get API endpoint from CloudFormation for staging/production
+            local stack_name="SoundBite-${env}-API"
             
             local api_endpoint=$(aws cloudformation describe-stacks \
                 --stack-name "$stack_name" \
