@@ -44,14 +44,16 @@ check_localstack() {
 check_cdklocal() {
     print_status "Checking cdklocal availability..."
     
-    if ! command -v cdklocal &> /dev/null; then
-        print_error "cdklocal is not installed!"
-        print_status "Please install it first:"
-        echo "  npm install -g aws-cdk-local"
+    cd cdk
+    if ! yarn cdklocal --version &> /dev/null; then
+        print_error "cdklocal is not available via yarn!"
+        print_status "Please install dependencies first:"
+        echo "  cd cdk && yarn install"
         exit 1
     fi
+    cd ..
     
-    print_success "cdklocal is available"
+    print_success "cdklocal is available via yarn"
 }
 
 # Deploy infrastructure to LocalStack
@@ -74,9 +76,9 @@ deploy_to_localstack() {
     echo "  AWS_ENDPOINT_URL_S3: $AWS_ENDPOINT_URL_S3"
     echo "  AWS_REGION: $AWS_REGION"
     
-    # Deploy using cdklocal
-    print_status "Running cdklocal deploy..."
-    cdklocal deploy --app "npx ts-node bin/soundbite-localstack.ts" --all --require-approval never
+    # Deploy using cdklocal with simplified approach
+    print_status "Running cdklocal deploy with simplified configuration..."
+    yarn cdklocal deploy --app "npx ts-node bin/soundbite-localstack.ts" --all --require-approval never --verbose
     
     cd ..
 }

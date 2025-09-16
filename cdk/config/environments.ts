@@ -23,7 +23,20 @@ export const environments: Record<string, EnvironmentConfig> = {
     enableBackup: false,
     retentionDays: 7,
     features: ['basic', 'debug', 'local'],
+    enableMultiEnvironment: true,
     description: 'Development environment for local testing and debugging',
+  },
+  'development-localstack': {
+    name: 'development-localstack',
+    port: 3000,
+    prefix: 'dev-localstack',
+    domain: 'localhost',
+    logLevel: 'debug',
+    enableMetrics: false,
+    enableBackup: false,
+    retentionDays: 1,
+    features: ['basic', 'debug', 'local', 'localstack'],
+    description: 'Development environment using LocalStack for local AWS services',
   },
   staging: {
     name: 'staging',
@@ -48,6 +61,7 @@ export const environments: Record<string, EnvironmentConfig> = {
     enableBackup: true,
     retentionDays: 90,
     features: ['full', 'monitoring', 'backup', 'scaling'],
+    enableMultiEnvironment: true,
     description: 'Production environment for live users',
   },
 };

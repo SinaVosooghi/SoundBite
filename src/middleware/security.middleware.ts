@@ -22,8 +22,14 @@ export class SecurityMiddleware implements NestMiddleware {
   constructor() {
     // Configure rate limiting using environment variables
     this.rateLimiter = rateLimit({
-      windowMs: parseInt(process.env.RATE_LIMIT_TTL ?? SECURITY_CONSTANTS.RATE_LIMIT.DEFAULT_WINDOW_MS.toString()),
-      max: parseInt(process.env.RATE_LIMIT_MAX ?? SECURITY_CONSTANTS.RATE_LIMIT.DEFAULT_MAX_REQUESTS.toString()),
+      windowMs: parseInt(
+        process.env.RATE_LIMIT_TTL ??
+          SECURITY_CONSTANTS.RATE_LIMIT.DEFAULT_WINDOW_MS.toString(),
+      ),
+      max: parseInt(
+        process.env.RATE_LIMIT_MAX ??
+          SECURITY_CONSTANTS.RATE_LIMIT.DEFAULT_MAX_REQUESTS.toString(),
+      ),
       message: {
         error: 'Too many requests from this IP, please try again later.',
         statusCode: 429,
@@ -48,7 +54,8 @@ export class SecurityMiddleware implements NestMiddleware {
   }
 
   private getHelmetConfig(nonce: string): Record<string, unknown> {
-    const environment = (process.env.NODE_ENV ?? 'development') as EnvironmentName;
+    const environment = (process.env.NODE_ENV ??
+      'development') as EnvironmentName;
     const envConfig =
       ENVIRONMENT_SECURITY[environment] ?? ENVIRONMENT_SECURITY.development;
     const isDevelopment = environment === 'development';

@@ -1,6 +1,6 @@
 export const developmentAWSConfig = {
   name: 'development-aws',
-  port: 3000,
+  port: 3001,
   aws: {
     region: 'us-east-1',
     credentials: {
@@ -9,7 +9,7 @@ export const developmentAWSConfig = {
   },
   services: {
     dynamodb: {
-      tableName: 'SoundBite-MultiEnv-SoundbitesTable',
+      tableName: 'SoundBite-development-SoundbitesTable',
       endpoint: undefined, // Uses default AWS endpoint
     },
     s3: {

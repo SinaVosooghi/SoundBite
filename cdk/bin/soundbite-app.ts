@@ -65,6 +65,7 @@ const queueStack = new QueueStack(
   `${stackConfig.projectName}-${environmentConfig.prefix}-Queue`,
   {
     ...stackConfig,
+    enableMultiEnvironment: environmentConfig.enableMultiEnvironment,
     description: `SoundBite Queue Stack (SQS) - ${targetEnv}`,
   },
 );

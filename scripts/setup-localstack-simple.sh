@@ -1,5 +1,5 @@
 #!/bin/bash
-# scripts/setup-localstack-simple.sh - Simple LocalStack setup using AWS CLI
+# scripts/setup-localstack-simple.sh - Simple LocalStack setup without CDK
 
 set -euo pipefail
 
@@ -40,73 +40,72 @@ check_localstack() {
     print_success "LocalStack is running"
 }
 
-# Create DynamoDB table
-create_dynamodb_table() {
-    print_status "Creating DynamoDB table..."
+# Create AWS resources directly using AWS CLI
+create_resources() {
+    print_status "Creating AWS resources directly..."
     
-    aws --endpoint-url=http://localhost:4566 dynamodb create-table \
-        --table-name "SoundBite-MultiEnv-SoundbitesTable" \
+    # Set environment variables for LocalStack
+    export AWS_ENDPOINT_URL=http://localhost:4566
+    export AWS_ENDPOINT_URL_S3=http://localhost:4566
+    export AWS_REGION=us-east-1
+    export AWS_DEFAULT_REGION=us-east-1
+    
+    print_status "Using LocalStack endpoints:"
+    echo "  AWS_ENDPOINT_URL: $AWS_ENDPOINT_URL"
+    echo "  AWS_ENDPOINT_URL_S3: $AWS_ENDPOINT_URL_S3"
+    echo "  AWS_REGION: $AWS_REGION"
+    
+    # Create DynamoDB table
+    print_status "Creating DynamoDB table..."
+    aws dynamodb create-table \
+        --table-name SoundBite-MultiEnv-SoundbitesTable \
         --attribute-definitions \
             AttributeName=pk,AttributeType=S \
             AttributeName=sk,AttributeType=S \
+            AttributeName=environment,AttributeType=S \
+            AttributeName=createdAt,AttributeType=S \
+            AttributeName=userId,AttributeType=S \
         --key-schema \
             AttributeName=pk,KeyType=HASH \
             AttributeName=sk,KeyType=RANGE \
+        --global-secondary-indexes \
+            'IndexName=EnvironmentIndex,KeySchema=[{AttributeName=environment,KeyType=HASH},{AttributeName=createdAt,KeyType=RANGE}],Projection={ProjectionType=ALL}' \
+            'IndexName=UserIdIndex,KeySchema=[{AttributeName=userId,KeyType=HASH},{AttributeName=environment,KeyType=RANGE}],Projection={ProjectionType=ALL}' \
         --billing-mode PAY_PER_REQUEST \
-        --region us-east-1
+        --tags Key=Project,Value=SoundBite Key=Environment,Value=development-localstack Key=Service,Value=Database || true
     
-    print_success "DynamoDB table created"
-}
-
-# Create S3 bucket
-create_s3_bucket() {
+    # Enable TTL separately
+    print_status "Enabling TTL for DynamoDB table..."
+    aws dynamodb update-time-to-live \
+        --table-name SoundBite-MultiEnv-SoundbitesTable \
+        --time-to-live-specification AttributeName=ttl,Enabled=true || true
+    
+    # Create S3 bucket
     print_status "Creating S3 bucket..."
+    aws s3 mb s3://soundbite-localstack-bucket || true
     
-    # Create bucket
-    aws --endpoint-url=http://localhost:4566 s3 mb s3://soundbite-multienv-soundbites-000000000000 --region us-east-1
-    
-    # Create environment folders
-    aws --endpoint-url=http://localhost:4566 s3api put-object --bucket soundbite-multienv-soundbites-000000000000 --key development/ --region us-east-1
-    aws --endpoint-url=http://localhost:4566 s3api put-object --bucket soundbite-multienv-soundbites-000000000000 --key staging/ --region us-east-1
-    aws --endpoint-url=http://localhost:4566 s3api put-object --bucket soundbite-multienv-soundbites-000000000000 --key production/ --region us-east-1
-    
-    print_success "S3 bucket and folders created"
-}
-
-# Create SQS queue
-create_sqs_queue() {
+    # Create SQS queue
     print_status "Creating SQS queue..."
+    aws sqs create-queue \
+        --queue-name SoundBite-MultiEnv-SoundbiteQueue \
+        --endpoint-url=http://localhost:4566 \
+        --tags Project=SoundBite,Environment=development-localstack,Service=Queue || true
     
-    # Create main queue
-    aws --endpoint-url=http://localhost:4566 sqs create-queue \
-        --queue-name "SoundBite-MultiEnv-SoundbiteQueue" \
-        --attributes '{"MessageRetentionPeriod":"1209600","VisibilityTimeout":"30"}' \
-        --region us-east-1
-    
-    # Create DLQ
-    aws --endpoint-url=http://localhost:4566 sqs create-queue \
-        --queue-name "SoundBite-MultiEnv-SoundbiteDLQ" \
-        --attributes '{"MessageRetentionPeriod":"1209600"}' \
-        --region us-east-1
-    
-    print_success "SQS queues created"
+    # Create SQS DLQ
+    print_status "Creating SQS DLQ..."
+    aws sqs create-queue \
+        --queue-name SoundBite-MultiEnv-SoundbiteDLQ \
+        --endpoint-url=http://localhost:4566 \
+        --tags Project=SoundBite,Environment=development-localstack,Service=Queue || true
 }
 
-# Verify resources
+# Verify resources were created
 verify_resources() {
     print_status "Verifying resources in LocalStack..."
     
-    # Check SQS queues
-    print_status "Checking SQS queues..."
-    if aws --endpoint-url=http://localhost:4566 sqs list-queues --query 'QueueUrls' --output text | grep -q "SoundBite"; then
-        print_success "SQS queues created successfully"
-    else
-        print_error "SQS queues not found"
-    fi
-    
     # Check DynamoDB tables
     print_status "Checking DynamoDB tables..."
-    if aws --endpoint-url=http://localhost:4566 dynamodb list-tables --query 'TableNames' --output text | grep -q "SoundBite"; then
+    if aws dynamodb list-tables --query 'TableNames' --output text | grep -q "SoundBite"; then
         print_success "DynamoDB tables created successfully"
     else
         print_error "DynamoDB tables not found"
@@ -114,10 +113,18 @@ verify_resources() {
     
     # Check S3 buckets
     print_status "Checking S3 buckets..."
-    if aws --endpoint-url=http://localhost:4566 s3 ls | grep -q "soundbite"; then
+    if aws s3 ls | grep -q "soundbite"; then
         print_success "S3 buckets created successfully"
     else
         print_error "S3 buckets not found"
+    fi
+    
+    # Check SQS queues
+    print_status "Checking SQS queues..."
+    if aws sqs list-queues --query 'QueueUrls' --output text | grep -q "SoundBite"; then
+        print_success "SQS queues created successfully"
+    else
+        print_error "SQS queues not found"
     fi
 }
 
@@ -125,14 +132,8 @@ verify_resources() {
 test_application() {
     print_status "Testing application with LocalStack..."
     
-    # Start the app in background
-    print_status "Starting application in LocalStack mode..."
-    export AWS_CONNECTION_MODE=localstack
-    ./scripts/soundbite.sh dev localstack &
-    local PID=$!
-    
-    # Wait for app to start
-    sleep 20
+    # Wait for app to be ready
+    sleep 5
     
     # Test basic endpoint
     if curl -s http://localhost:3000/ > /dev/null; then
@@ -142,7 +143,8 @@ test_application() {
         print_status "Testing soundbite creation..."
         response=$(curl -s -X POST http://localhost:3000/soundbite \
             -H "Content-Type: application/json" \
-            -d '{"text":"Testing LocalStack integration"}' 2>&1)
+            -H "Idempotency-Key: 550e8400-e29b-41d4-a716-446655440000" \
+            -d '{"text":"Testing LocalStack integration","voiceId":"Joanna"}' 2>&1)
         
         if echo "$response" | grep -q "id"; then
             print_success "Soundbite creation successful - LocalStack is working!"
@@ -152,10 +154,6 @@ test_application() {
     else
         print_error "Application is not responding"
     fi
-    
-    # Stop the app
-    kill $PID 2>/dev/null || true
-    wait $PID 2>/dev/null || true
 }
 
 # Main function
@@ -166,9 +164,7 @@ main() {
     check_localstack
     
     # Create resources
-    create_dynamodb_table
-    create_s3_bucket
-    create_sqs_queue
+    create_resources
     
     # Verify resources
     verify_resources
@@ -177,20 +173,21 @@ main() {
     test_application
     
     echo ""
-    print_success "LocalStack setup complete!"
+    print_success "Simple LocalStack setup complete!"
     echo ""
     echo "Your LocalStack environment now has:"
-    echo "✅ SQS queues for message processing"
-    echo "✅ DynamoDB tables for data storage"
-    echo "✅ S3 buckets for file storage"
+    echo "✅ DynamoDB table: SoundBite-MultiEnv-SoundbitesTable"
+    echo "✅ S3 bucket: soundbite-localstack-bucket"
+    echo "✅ SQS queue: SoundBite-MultiEnv-SoundbiteQueue"
+    echo "✅ SQS DLQ: SoundBite-MultiEnv-SoundbiteDLQ"
     echo ""
     echo "You can now use:"
     echo "  ./scripts/soundbite.sh dev localstack"
     echo ""
     echo "LocalStack endpoints:"
-    echo "  SQS: http://localhost:4566"
     echo "  DynamoDB: http://localhost:4566"
     echo "  S3: http://localhost:4566"
+    echo "  SQS: http://localhost:4566"
 }
 
 # Run main function

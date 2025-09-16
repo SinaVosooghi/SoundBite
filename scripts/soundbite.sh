@@ -146,8 +146,16 @@ main() {
             print_status "Running tests..."
             yarn test
             ;;
+        "setup")
+            print_status "Setting up LocalStack environment..."
+            ./scripts/setup-localstack-simple.sh
+            ;;
         "setup-localstack")
             print_status "Setting up LocalStack environment..."
+            ./scripts/setup-localstack-simple.sh
+            ;;
+        "setup-localstack-cdk")
+            print_status "Setting up LocalStack environment with CDK..."
             ./scripts/setup-localstack.sh
             ;;
         "cdk")
@@ -183,7 +191,7 @@ main() {
 }
 
 show_help() {
-    echo "Usage: $0 {dev|deploy|build|status|test|cdk|help}"
+    echo "Usage: $0 {dev|deploy|build|status|test|setup|cdk|help}"
     echo ""
     echo "Commands:"
     echo "  dev [localstack|aws|aws-deployed] - Start development environment"
@@ -191,6 +199,7 @@ show_help() {
     echo "                         aws: Use real AWS services locally"
     echo "                         aws-deployed: Deploy and run on AWS"
     echo ""
+    echo "  setup                 - Setup LocalStack environment (alias for setup-localstack)"
     echo "  setup-localstack      - Setup LocalStack environment"
     echo "  deploy {staging|production} - Deploy specific environment"
     echo "  build {staging|production|all} - Build Docker images"
@@ -200,6 +209,7 @@ show_help() {
     echo "  help                   - Show this help"
     echo ""
     echo "Examples:"
+    echo "  $0 setup              # Setup LocalStack environment"
     echo "  $0 dev localstack     # Start dev with LocalStack"
     echo "  $0 dev aws            # Start dev with real AWS"
     echo "  $0 dev aws-deployed   # Deploy and run on AWS"

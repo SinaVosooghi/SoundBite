@@ -72,7 +72,7 @@ export class SoundbiteService {
         `Failed to initialize AWS services: ${error instanceof Error ? error.message : String(error)}`,
       );
       this.logger.warn('Application will start but AWS features may not work');
-      
+
       // Create mock clients to prevent null reference errors
       this.sqs = {
         send: () => {

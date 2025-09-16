@@ -28,7 +28,8 @@
     "deploy:prod": "cd cdk && npx cdk deploy --context environment=prod",
     "destroy": "cd cdk && npx cdk destroy",
     "logs": "aws logs tail /aws/lambda/soundbite-api --follow",
-    "health": "curl http://localhost:3000/health"
+    "health": "curl http://localhost:3000/health",
+    "prepare": "husky"
   },
   "keywords": [
     "audio",
@@ -116,5 +117,14 @@
   "bugs": {
     "url": "https://github.com/SinaVosooghi/SoundBite/issues"
   },
-  "homepage": "https://github.com/SinaVosooghi/SoundBite#readme"
+  "homepage": "https://github.com/SinaVosooghi/SoundBite#readme",
+  "lint-staged": {
+    "*.{ts,js,tsx,jsx}": [
+      "eslint --fix",
+      "prettier --write"
+    ],
+    "*.{json,md,yml,yaml}": [
+      "prettier --write"
+    ]
+  }
 }
