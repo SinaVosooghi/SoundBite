@@ -62,3 +62,4 @@ To bypass hooks (not recommended):
 ```bash
 git commit --no-verify -m "message"
 ```
+

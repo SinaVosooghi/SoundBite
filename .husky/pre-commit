@@ -1,0 +1,2 @@
+# Run linting and tests only on changed files
+node scripts/lint-changed-files.js
