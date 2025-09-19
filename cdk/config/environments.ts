@@ -26,7 +26,7 @@ export const environments: Record<string, EnvironmentConfig> = {
     enableMultiEnvironment: true,
     description: 'Development environment for local testing and debugging',
   },
-  'development-localstack': {
+  developmentLocalstack: {
     name: 'development-localstack',
     port: 3000,
     prefix: 'dev-localstack',
@@ -36,7 +36,8 @@ export const environments: Record<string, EnvironmentConfig> = {
     enableBackup: false,
     retentionDays: 1,
     features: ['basic', 'debug', 'local', 'localstack'],
-    description: 'Development environment using LocalStack for local AWS services',
+    description:
+      'Development environment using LocalStack for local AWS services',
   },
   staging: {
     name: 'staging',

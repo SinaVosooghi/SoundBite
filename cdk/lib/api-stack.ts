@@ -112,12 +112,12 @@ export class ApiStack extends cdk.Stack {
     const userData = ec2.UserData.forLinux();
 
     if (props.enableMultiEnvironment ?? false) {
-        // Simplified setup - Focus on staging deployment
-        userData.addCommands(
-          '#!/bin/bash -xe',
-          'exec > >(tee /var/log/user-data.log | logger -t user-data -s 2>/dev/console) 2>&1',
-          'echo "=== Starting SoundBite EC2 User Data Script ==="',
-          'dnf update -y',
+      // Simplified setup - Focus on staging deployment
+      userData.addCommands(
+        '#!/bin/bash -xe',
+        'exec > >(tee /var/log/user-data.log | logger -t user-data -s 2>/dev/console) 2>&1',
+        'echo "=== Starting SoundBite EC2 User Data Script ==="',
+        'dnf update -y',
         'dnf install -y docker nginx git',
         'systemctl start docker',
         'systemctl enable docker',

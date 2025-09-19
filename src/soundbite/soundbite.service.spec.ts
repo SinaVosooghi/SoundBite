@@ -1,22 +1,27 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
+/* eslint-disable @typescript-eslint/no-unsafe-assignment */
+/* eslint-disable @typescript-eslint/no-unsafe-call */
+/* eslint-disable @typescript-eslint/no-unsafe-member-access */
+/* eslint-disable @typescript-eslint/no-unsafe-argument */
 import type { TestingModule } from '@nestjs/testing';
 import { Test } from '@nestjs/testing';
 import { SoundbiteService } from './soundbite.service';
 import type { CreateSoundbiteDto } from './dto/create-soundbite.dto';
-import { SendMessageCommand, SQSClient } from '@aws-sdk/client-sqs';
-import { GetItemCommand, DynamoDBClient } from '@aws-sdk/client-dynamodb';
+// import { SendMessageCommand, SQSClient } from '@aws-sdk/client-sqs';
+// import { GetItemCommand, DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { ConfigService } from '@nestjs/config';
 import { mockClient } from 'aws-sdk-client-mock';
 import { ValidationService } from '../services/validation.service';
-import {
-  ProcessingException,
-  SoundbiteNotFoundException,
-  InvalidTextException,
-} from '../exceptions/soundbite.exceptions';
+// import {
+//   ProcessingException,
+//   SoundbiteNotFoundException,
+//   InvalidTextException,
+// } from '../exceptions/soundbite.exceptions';
 
 describe('SoundbiteService', () => {
   let service: SoundbiteService;
-  let sqsMock: ReturnType<typeof mockClient>;
-  let dynamoMock: ReturnType<typeof mockClient>;
+  let sqsMock: any;
+  let dynamoMock: any;
 
   beforeAll(() => {
     // Set up mocks before any tests run
