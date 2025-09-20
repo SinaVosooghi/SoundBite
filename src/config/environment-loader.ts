@@ -47,6 +47,10 @@ export class EnvironmentLoader {
     return this.currentConfig;
   }
 
+  public resetConfig(): void {
+    this.currentConfig = this.detectEnvironment();
+  }
+
   public getEnvironmentName(): string {
     return this.currentConfig.name;
   }
@@ -139,6 +143,8 @@ export class EnvironmentLoader {
 export const environmentLoader = EnvironmentLoader.getInstance();
 export const getEnvironmentConfig = (): EnvironmentConfig =>
   environmentLoader.getConfig();
+export const resetEnvironmentConfig = (): void =>
+  environmentLoader.resetConfig();
 export const getEnvironmentName = (): string =>
   environmentLoader.getEnvironmentName();
 export const isDevelopment = (): boolean => environmentLoader.isDevelopment();

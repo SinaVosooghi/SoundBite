@@ -5,7 +5,7 @@ echo "🚀 Deploying Staging Environment..."
 
 # 1. Build staging image
 echo "📦 Building staging Docker image..."
-docker build -f Dockerfile.staging -t soundbite:staging .
+docker build -f Dockerfile -t soundbite:staging .
 
 # 2. Push to ECR
 echo "⬆️  Pushing staging image to ECR..."

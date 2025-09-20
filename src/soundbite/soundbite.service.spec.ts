@@ -2,21 +2,18 @@
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
 /* eslint-disable @typescript-eslint/no-unsafe-call */
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
-/* eslint-disable @typescript-eslint/no-unsafe-argument */
+
 import type { TestingModule } from '@nestjs/testing';
 import { Test } from '@nestjs/testing';
 import { SoundbiteService } from './soundbite.service';
 import type { CreateSoundbiteDto } from './dto/create-soundbite.dto';
-// import { SendMessageCommand, SQSClient } from '@aws-sdk/client-sqs';
-// import { GetItemCommand, DynamoDBClient } from '@aws-sdk/client-dynamodb';
+import { SQSClient } from '@aws-sdk/client-sqs';
+import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { ConfigService } from '@nestjs/config';
 import { mockClient } from 'aws-sdk-client-mock';
 import { ValidationService } from '../services/validation.service';
-// import {
-//   ProcessingException,
-//   SoundbiteNotFoundException,
-//   InvalidTextException,
-// } from '../exceptions/soundbite.exceptions';
+import { InvalidTextException } from '../exceptions/soundbite.exceptions';
+import { resetEnvironmentConfig } from '../config';
 
 describe('SoundbiteService', () => {
   let service: SoundbiteService;
@@ -30,9 +27,19 @@ describe('SoundbiteService', () => {
   });
 
   beforeEach(async () => {
+    // Set NODE_ENV to test for this test
+    process.env.NODE_ENV = 'test';
+    // Reset environment configuration to pick up the new NODE_ENV
+    resetEnvironmentConfig();
+
     // Reset mocks before each test
     sqsMock.reset();
     dynamoMock.reset();
+
+    // Configure mocks for test environment
+    sqsMock.onAnyCommand().resolves({});
+    // In test mode, the service returns mock data without calling DynamoDB
+    // So we don't need to set up DynamoDB mocks
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -63,6 +70,10 @@ describe('SoundbiteService', () => {
     // Clean up mocks after all tests
     sqsMock.restore();
     dynamoMock.restore();
+
+    // Reset environment configuration to avoid affecting other tests
+    process.env.NODE_ENV = 'development-localstack';
+    resetEnvironmentConfig();
   });
 
   describe('createSoundbite', () => {

@@ -36,11 +36,8 @@ scripts/
 ### Docker Configuration Analysis
 ```
 Dockerfiles:
-├── Dockerfile                      # Multi-stage production (67 lines)
-├── Dockerfile.staging              # Staging environment
-├── Dockerfile.production           # Production environment
+├── Dockerfile                      # Multi-stage production (used for both staging and production)
 ├── Dockerfile.dev                  # Development environment
-├── Dockerfile.dev-fast             # Fast development
 └── cdk/Dockerfile                  # CDK-specific
 
 Docker Compose:

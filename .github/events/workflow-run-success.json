@@ -1,0 +1,15 @@
+{
+  "action": "completed",
+  "workflow_run": {
+    "id": 123456,
+    "name": "Staging/Production CI (Build & Test + Push)",
+    "head_branch": "staging",
+    "head_sha": "def456",
+    "conclusion": "success",
+    "status": "completed"
+  },
+  "repository": {
+    "name": "SoundBite",
+    "full_name": "SinaVosooghi/SoundBite"
+  }
+}

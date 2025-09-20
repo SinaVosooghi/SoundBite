@@ -5,7 +5,7 @@ echo "🚀 Deploying Production Environment..."
 
 # 1. Build production image
 echo "📦 Building production Docker image..."
-docker build -f Dockerfile.production -t soundbite:production .
+docker build -f Dockerfile -t soundbite:production .
 
 # 2. Push to ECR
 echo "⬆️  Pushing production image to ECR..."

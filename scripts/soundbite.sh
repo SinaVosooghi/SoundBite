@@ -117,16 +117,16 @@ main() {
             case "${1:-}" in
                 "staging")
                     print_status "Building staging Docker image..."
-                    docker build -f Dockerfile.staging -t soundbite:staging .
+                    docker build -f Dockerfile -t soundbite:staging .
                     ;;
                 "production")
                     print_status "Building production Docker image..."
-                    docker build -f Dockerfile.production -t soundbite:production .
+                    docker build -f Dockerfile -t soundbite:production .
                     ;;
                 "all")
                     print_status "Building all Docker images..."
-                    docker build -f Dockerfile.staging -t soundbite:staging .
-                    docker build -f Dockerfile.production -t soundbite:production .
+                    docker build -f Dockerfile -t soundbite:staging .
+                    docker build -f Dockerfile -t soundbite:production .
                     ;;
                 *)
                     print_error "Please specify: staging, production, or all"

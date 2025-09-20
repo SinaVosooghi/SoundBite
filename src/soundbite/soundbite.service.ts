@@ -13,7 +13,6 @@ import {
   PutItemCommand,
 } from '@aws-sdk/client-dynamodb';
 import { v4 as uuidv4 } from 'uuid';
-import { getEnvironmentConfig, isLocalStack } from '../config';
 import { AWSConfig } from 'src/types/aws';
 import { SOUNDBITE_CONSTANTS, SoundbiteStatus } from '../constants/soundbite';
 import { ErrorHandler } from '../utils/error-handler';
@@ -21,33 +20,50 @@ import { ErrorHandler } from '../utils/error-handler';
 @Injectable()
 export class SoundbiteService {
   private readonly logger = new Logger(SoundbiteService.name);
-  private readonly sqs: SQSClient;
-  private readonly dynamo: DynamoDBClient;
-  private readonly envConfig = getEnvironmentConfig();
-
+  private sqs: SQSClient;
+  private dynamo: DynamoDBClient;
   constructor(
     private readonly configService: ConfigService,
     private readonly validationService: ValidationService,
   ) {
+    // Initialize AWS clients as undefined - will be set up lazily when needed
+    this.sqs = undefined as unknown as SQSClient;
+    this.dynamo = undefined as unknown as DynamoDBClient;
+  }
+
+  private initializeAwsClients(): void {
+    if (this.sqs !== undefined && this.dynamo !== undefined) {
+      return; // Already initialized
+    }
+
     try {
-      // Use environment-aware configuration
+      // Use ConfigService to get environment configuration
+      const nodeEnv = this.configService.get<string>('NODE_ENV', 'development');
+      const awsRegion = this.configService.get<string>(
+        'AWS_REGION',
+        'us-east-1',
+      );
+      const awsEndpoint = this.configService.get<string>('AWS_ENDPOINT');
+      const awsAccessKeyId =
+        this.configService.get<string>('AWS_ACCESS_KEY_ID');
+      const awsSecretAccessKey = this.configService.get<string>(
+        'AWS_SECRET_ACCESS_KEY',
+      );
       const awsConfig: AWSConfig = {
-        region: this.envConfig.aws.region,
+        region: awsRegion,
       };
 
       // Add LocalStack specific configuration
       if (
-        isLocalStack() &&
-        this.envConfig.aws.endpoint !== undefined &&
-        this.envConfig.aws.endpoint !== null &&
-        this.envConfig.aws.endpoint.length > 0 &&
-        this.envConfig.aws.credentials
+        nodeEnv === 'development-localstack' &&
+        awsEndpoint !== undefined &&
+        awsAccessKeyId !== undefined &&
+        awsSecretAccessKey !== undefined
       ) {
-        awsConfig.endpoint = this.envConfig.aws.endpoint;
+        awsConfig.endpoint = awsEndpoint;
         awsConfig.credentials = {
-          accessKeyId: this.envConfig.aws.credentials.accessKeyId ?? 'test',
-          secretAccessKey:
-            this.envConfig.aws.credentials.secretAccessKey ?? 'test',
+          accessKeyId: awsAccessKeyId,
+          secretAccessKey: awsSecretAccessKey,
         };
         awsConfig.forcePathStyle = true;
       } else {
@@ -58,11 +74,9 @@ export class SoundbiteService {
         );
       }
 
+      this.logger.log(`Initializing AWS services for environment: ${nodeEnv}`);
       this.logger.log(
-        `Initializing AWS services for environment: ${this.envConfig.name}`,
-      );
-      this.logger.log(
-        `Using endpoint: ${isLocalStack() ? this.envConfig.aws.endpoint : 'AWS default'}`,
+        `Using endpoint: ${nodeEnv === 'development-localstack' ? awsEndpoint : 'AWS default'}`,
       );
 
       this.sqs = new SQSClient(awsConfig);
@@ -113,7 +127,8 @@ export class SoundbiteService {
     const id = uuidv4();
 
     // Handle test environment where AWS services aren't available
-    if (this.envConfig.name === 'test') {
+    const nodeEnv = this.configService.get<string>('NODE_ENV', 'development');
+    if (nodeEnv === 'test') {
       this.logger.log('Running in test environment - returning mock response');
       return {
         id,
@@ -128,6 +143,19 @@ export class SoundbiteService {
     }
 
     try {
+      // Initialize AWS clients if not already done
+      this.initializeAwsClients();
+
+      // Get configuration values
+      const tableName = this.configService.get<string>(
+        'DYNAMODB_TABLE_NAME',
+        'soundbites',
+      );
+      const queueUrl = this.configService.get<string>(
+        'SQS_QUEUE_URL',
+        'https://sqs.us-east-1.amazonaws.com/123456789012/soundbite-queue',
+      );
+
       this.logger.log(
         `Creating soundbite for text: "${text.substring(0, 50)}${
           text.length > 50 ? '...' : ''
@@ -141,16 +169,16 @@ export class SoundbiteService {
         voiceId: voiceId ?? SOUNDBITE_CONSTANTS.DEFAULT_VOICE_ID,
         userId,
         createdAt: now,
-        environment: this.envConfig.name, // Add environment info to message
+        environment: nodeEnv, // Add environment info to message
         idempotencyKey,
       };
 
       // First, store the soundbite in DynamoDB
       const putCommand = new PutItemCommand({
-        TableName: this.envConfig.services.dynamodb.tableName,
+        TableName: tableName,
 
         Item: {
-          pk: { S: `${this.envConfig.name}:${id}` },
+          pk: { S: `${nodeEnv}:${id}` },
           sk: { S: `${SOUNDBITE_CONSTANTS.DYNAMODB.SK_PREFIX}${id}` },
           text: { S: text },
           voiceId: { S: voiceId ?? SOUNDBITE_CONSTANTS.DEFAULT_VOICE_ID },
@@ -158,32 +186,32 @@ export class SoundbiteService {
           status: { S: SOUNDBITE_CONSTANTS.STATUS.PENDING },
           createdAt: { S: now },
           updatedAt: { S: now },
-          environment: { S: this.envConfig.name },
+          environment: { S: nodeEnv },
         },
       });
 
       await this.dynamo.send(putCommand);
       this.logger.log(
-        `Soundbite stored in DynamoDB with ID: ${id} in environment: ${this.envConfig.name}`,
+        `Soundbite stored in DynamoDB with ID: ${id} in environment: ${nodeEnv}`,
       );
 
       // Then send message to SQS for processing
       const command = new SendMessageCommand({
-        QueueUrl: this.envConfig.services.sqs.queueUrl,
+        QueueUrl: queueUrl,
 
         MessageBody: JSON.stringify(message),
 
         MessageAttributes: {
           [SOUNDBITE_CONSTANTS.SQS.ENVIRONMENT_ATTRIBUTE]: {
             DataType: 'String',
-            StringValue: this.envConfig.name,
+            StringValue: nodeEnv,
           },
         },
       });
 
       await this.sqs.send(command);
       this.logger.log(
-        `Soundbite job created with ID: ${id} in environment: ${this.envConfig.name}`,
+        `Soundbite job created with ID: ${id} in environment: ${nodeEnv}`,
       );
 
       return {
@@ -193,16 +221,16 @@ export class SoundbiteService {
         status: SOUNDBITE_CONSTANTS.STATUS.PENDING as SoundbiteStatus,
         createdAt: now,
         updatedAt: now,
-        environment: this.envConfig.name,
+        environment: nodeEnv,
       };
     } catch (error: unknown) {
       if (error instanceof Error) {
         ErrorHandler.logError(this.logger, error, 'soundbite creation', id, {
-          environment: this.envConfig.name,
+          environment: nodeEnv,
         });
 
         throw ErrorHandler.createException(error, 'creation', id, {
-          environment: this.envConfig.name,
+          environment: nodeEnv,
         });
       } else {
         throw ErrorHandler.handleUnknownError(
@@ -210,7 +238,7 @@ export class SoundbiteService {
           error,
           'creation',
           id,
-          { environment: this.envConfig.name },
+          { environment: nodeEnv },
         );
       }
     }
@@ -228,7 +256,8 @@ export class SoundbiteService {
     environment: string;
   }> {
     // Handle test environment where AWS services aren't available
-    if (this.envConfig.name === 'test') {
+    const nodeEnv = this.configService.get<string>('NODE_ENV', 'development');
+    if (nodeEnv === 'test') {
       this.logger.log('Running in test environment - returning mock response');
       return {
         id,
@@ -244,15 +273,24 @@ export class SoundbiteService {
     }
 
     try {
+      // Initialize AWS clients if not already done
+      this.initializeAwsClients();
+
+      // Get configuration values
+      const tableName = this.configService.get<string>(
+        'DYNAMODB_TABLE_NAME',
+        'soundbites',
+      );
+
       this.logger.log(
-        `Fetching soundbite with ID: ${id} from environment: ${this.envConfig.name}`,
+        `Fetching soundbite with ID: ${id} from environment: ${nodeEnv}`,
       );
 
       const command = new GetItemCommand({
-        TableName: this.envConfig.services.dynamodb.tableName,
+        TableName: tableName,
 
         Key: {
-          pk: { S: `${this.envConfig.name}:${id}` },
+          pk: { S: `${nodeEnv}:${id}` },
           sk: { S: `${SOUNDBITE_CONSTANTS.DYNAMODB.SK_PREFIX}${id}` },
         },
       });
@@ -261,10 +299,10 @@ export class SoundbiteService {
 
       if (!result.Item) {
         this.logger.warn(
-          `Soundbite not found with ID: ${id} in environment: ${this.envConfig.name}`,
+          `Soundbite not found with ID: ${id} in environment: ${nodeEnv}`,
         );
         throw new SoundbiteNotFoundException(id, {
-          environment: this.envConfig.name,
+          environment: nodeEnv,
         });
       }
 
@@ -283,11 +321,11 @@ export class SoundbiteService {
           SOUNDBITE_CONSTANTS.STATUS.PENDING,
         createdAt: result.Item.createdAt.S ?? '',
         updatedAt: result.Item.updatedAt.S ?? '',
-        environment: this.envConfig.name,
+        environment: nodeEnv,
       };
 
       this.logger.log(
-        `Soundbite retrieved: ${id} (status: ${soundbite.status}) from environment: ${this.envConfig.name}`,
+        `Soundbite retrieved: ${id} (status: ${soundbite.status}) from environment: ${nodeEnv}`,
       );
       return soundbite;
     } catch (error: unknown) {
@@ -295,11 +333,11 @@ export class SoundbiteService {
         throw error;
       } else if (error instanceof Error) {
         ErrorHandler.logError(this.logger, error, 'soundbite retrieval', id, {
-          environment: this.envConfig.name,
+          environment: nodeEnv,
         });
 
         throw ErrorHandler.createException(error, 'retrieval', id, {
-          environment: this.envConfig.name,
+          environment: nodeEnv,
         });
       } else {
         throw ErrorHandler.handleUnknownError(
@@ -307,7 +345,7 @@ export class SoundbiteService {
           error,
           'retrieval',
           id,
-          { environment: this.envConfig.name },
+          { environment: nodeEnv },
         );
       }
     }

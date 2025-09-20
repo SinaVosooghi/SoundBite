@@ -1,0 +1,172 @@
+name: Staging/Production CD (Deploy)
+
+on:
+  workflow_run:
+    workflows: ["Staging/Production CI (Build & Push)"]
+    types: [completed]
+    branches: [ staging, master ]
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  AWS_REGION: us-east-1
+  ECR_REGISTRY: 762233763891.dkr.ecr.us-east-1.amazonaws.com
+  ECR_REPOSITORY: soundbite-development-api
+
+jobs:
+  deploy:
+    name: Deploy to Environment
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        role-to-assume: arn:aws:iam::762233763891:role/GitHubActionsRole
+        aws-region: ${{ env.AWS_REGION }}
+        
+    - name: Determine environment from branch
+      id: env-info
+      run: |
+        if [[ "${{ github.event.workflow_run.head_branch }}" == "master" ]]; then
+          echo "environment=production" >> $GITHUB_OUTPUT
+          echo "tag=production" >> $GITHUB_OUTPUT
+        elif [[ "${{ github.event.workflow_run.head_branch }}" == "staging" ]]; then
+          echo "environment=staging" >> $GITHUB_OUTPUT
+          echo "tag=staging" >> $GITHUB_OUTPUT
+        else
+          echo "environment=development" >> $GITHUB_OUTPUT
+          echo "tag=dev" >> $GITHUB_OUTPUT
+        fi
+        
+    - name: Deploy infrastructure
+      run: |
+        cd cdk
+        CDK_ENVIRONMENT=${{ steps.env-info.outputs.environment }} npx cdk deploy --all --require-approval never
+        
+    - name: Get deployment outputs
+      id: deployment-outputs
+      run: |
+        API_INSTANCE_ID=$(aws cloudformation describe-stacks \
+          --stack-name SoundBite-${{ steps.env-info.outputs.environment }}-API \
+          --query 'Stacks[0].Outputs[?OutputKey==`ApiInstanceId`].OutputValue' \
+          --output text 2>/dev/null || echo "N/A")
+        echo "api-instance-id=$API_INSTANCE_ID" >> $GITHUB_OUTPUT
+        
+    - name: Deploy application to EC2 (using CI-built image)
+      if: steps.deployment-outputs.outputs.api-instance-id != 'N/A'
+      run: |
+        # Wait for EC2 instance to be ready
+        aws ec2 wait instance-running --instance-ids ${{ steps.deployment-outputs.outputs.api-instance-id }}
+        
+        # Get public IP
+        PUBLIC_IP=$(aws ec2 describe-instances \
+          --instance-ids ${{ steps.deployment-outputs.outputs.api-instance-id }} \
+          --query 'Reservations[0].Instances[0].PublicIpAddress' \
+          --output text)
+        
+        echo "Deployment completed!"
+        echo "Environment: ${{ steps.env-info.outputs.environment }}"
+        echo "Instance ID: ${{ steps.deployment-outputs.outputs.api-instance-id }}"
+        echo "Public IP: $PUBLIC_IP"
+        echo "Health Check: http://$PUBLIC_IP/health"
+        echo "Using image: ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:${{ steps.env-info.outputs.tag }}"
+        
+        if [[ "${{ steps.env-info.outputs.environment }}" == "staging" ]]; then
+          echo "Staging URL: http://$PUBLIC_IP/staging/"
+        elif [[ "${{ steps.env-info.outputs.environment }}" == "production" ]]; then
+          echo "Production URL: http://$PUBLIC_IP/prod/"
+        fi
+
+  verify-deployment:
+    name: Verify Deployment
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: [deploy]
+    if: always()
+    
+    steps:
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        role-to-assume: arn:aws:iam::762233763891:role/GitHubActionsRole
+        aws-region: ${{ env.AWS_REGION }}
+        
+    - name: Determine environment from branch
+      id: env-info
+      run: |
+        if [[ "${{ github.event.workflow_run.head_branch }}" == "master" ]]; then
+          echo "environment=production" >> $GITHUB_OUTPUT
+        elif [[ "${{ github.event.workflow_run.head_branch }}" == "staging" ]]; then
+          echo "environment=staging" >> $GITHUB_OUTPUT
+        else
+          echo "environment=development" >> $GITHUB_OUTPUT
+        fi
+        
+    - name: Get deployment info
+      id: deployment-info
+      run: |
+        API_INSTANCE_ID=$(aws cloudformation describe-stacks \
+          --stack-name SoundBite-${{ steps.env-info.outputs.environment }}-API \
+          --query 'Stacks[0].Outputs[?OutputKey==`ApiInstanceId`].OutputValue' \
+          --output text 2>/dev/null || echo "N/A")
+        
+        if [[ "$API_INSTANCE_ID" != "N/A" ]]; then
+          PUBLIC_IP=$(aws ec2 describe-instances \
+            --instance-ids $API_INSTANCE_ID \
+            --query 'Reservations[0].Instances[0].PublicIpAddress' \
+            --output text)
+          echo "api-instance-id=$API_INSTANCE_ID" >> $GITHUB_OUTPUT
+          echo "public-ip=$PUBLIC_IP" >> $GITHUB_OUTPUT
+        fi
+        
+    - name: Health check
+      if: steps.deployment-info.outputs.public-ip != ''
+      run: |
+        echo "Testing health endpoint..."
+        sleep 30  # Wait for application to start
+        
+        # Test health endpoint
+        curl -f http://${{ steps.deployment-info.outputs.public-ip }}/health || {
+          echo "❌ Health check failed"
+          exit 1
+        }
+        
+        echo "✅ Health check passed"
+        
+        # Test environment-specific endpoint
+        if [[ "${{ steps.env-info.outputs.environment }}" == "staging" ]]; then
+          curl -f http://${{ steps.deployment-info.outputs.public-ip }}/staging/ || {
+            echo "❌ Staging endpoint failed"
+            exit 1
+          }
+          echo "✅ Staging endpoint working"
+        elif [[ "${{ steps.env-info.outputs.environment }}" == "production" ]]; then
+          curl -f http://${{ steps.deployment-info.outputs.public-ip }}/prod/ || {
+            echo "❌ Production endpoint failed"
+            exit 1
+          }
+          echo "✅ Production endpoint working"
+        fi
+
+  notify-success:
+    name: Notify Success
+    runs-on: ubuntu-latest
+    needs: [verify-deployment]
+    if: always()
+    
+    steps:
+    - name: Notify deployment success
+      run: |
+        echo "🎉 Deployment completed successfully!"
+        echo "Environment: ${{ github.event.workflow_run.head_branch }}"
+        echo "Triggered by: ${{ github.actor }}"
+        echo "Time: $(date)"
+        echo "Using pre-built image from CI pipeline"

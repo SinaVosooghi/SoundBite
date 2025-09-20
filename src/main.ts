@@ -2,11 +2,13 @@ import { NestFactory } from '@nestjs/core';
 import { ValidationPipe, Logger } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { AppModule } from './app.module';
-import { getEnvironmentConfig, getEnvironmentName } from './config';
 
 async function bootstrap(): Promise<void> {
   const app = await NestFactory.create(AppModule);
   const logger = new Logger('Bootstrap');
+
+  // Import environment configuration inside the function to avoid module-level initialization
+  const { getEnvironmentConfig, getEnvironmentName } = await import('./config');
   const envConfig = getEnvironmentConfig();
 
   // Enable global validation
