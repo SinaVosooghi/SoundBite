@@ -107,24 +107,13 @@ jobs:
         S3_BUCKET: soundbitesbucket
         SQS_QUEUE_URL: http://sqs.us-east-1.localhost.localstack.cloud:4566/000000000000/SoundbiteQueue
         
-    # Step 3: Build Docker image
-    - name: Set up Docker Buildx
-      uses: docker/setup-buildx-action@v3
-      
-    - name: Build Docker image (dev)
-      uses: docker/build-push-action@v5
-      with:
-        context: .
-        file: ./Dockerfile.dev
-        push: false
-        tags: soundbite-dev:latest
-        cache-from: type=gha
-        cache-to: type=gha,mode=max
-        platforms: linux/amd64
-        
-    # Step 4: Test Docker + AWS infra
-    - name: Test Docker container with AWS infra
+    # Step 3: Build and Test Docker + AWS infra
+    - name: Build and Test Docker container with AWS infra
       run: |
+        echo "Building Docker image for dev environment..."
+        docker build -f ./Dockerfile.dev -t soundbite-dev:latest .
+        echo "✅ Docker image built successfully"
+        
         echo "Testing Docker container with AWS infrastructure..."
         
         # Start container with proper networking for GitHub Actions
