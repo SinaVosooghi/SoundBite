@@ -8,8 +8,9 @@ async function bootstrap(): Promise<void> {
   const logger = new Logger('Bootstrap');
 
   // Import environment configuration inside the function to avoid module-level initialization
-  const { getEnvironmentConfig, getEnvironmentName, resetEnvironmentConfig } = await import('./config');
-  
+  const { getEnvironmentConfig, getEnvironmentName, resetEnvironmentConfig } =
+    await import('./config');
+
   // Reset environment configuration to ensure it uses the current environment variables
   resetEnvironmentConfig();
   const envConfig = getEnvironmentConfig();

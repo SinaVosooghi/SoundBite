@@ -127,15 +127,16 @@ jobs:
       run: |
         echo "Testing Docker container with AWS infrastructure..."
         
-        # Start container
+        # Start container with proper networking for GitHub Actions
         docker run -d \
           --name test-dev-container \
+          --network host \
           -p 3001:3000 \
           -e NODE_ENV=development-localstack \
           -e AWS_REGION=us-east-1 \
           -e AWS_ACCESS_KEY_ID=test \
           -e AWS_SECRET_ACCESS_KEY=test \
-          -e AWS_ENDPOINT=http://host.docker.internal:4566 \
+          -e AWS_ENDPOINT=http://localhost:4566 \
           -e TABLE_NAME=SoundbitesTable \
           -e QUEUE_NAME=SoundbiteQueue \
           -e S3_BUCKET=soundbitesbucket \
@@ -144,7 +145,7 @@ jobs:
         
         # Wait for container to start
         for i in {1..30}; do
-          if curl -s http://localhost:3001/health > /dev/null 2>&1; then
+          if curl -s http://localhost:3000/health > /dev/null 2>&1; then
             echo "✅ Docker container started successfully"
             break
           fi
@@ -153,10 +154,10 @@ jobs:
         done
         
         # Test health endpoint
-        curl -f http://localhost:3001/health
+        curl -f http://localhost:3000/health
         
         # Test API endpoint
-        curl -f http://localhost:3001/
+        curl -f http://localhost:3000/
         
         # Clean up
         docker stop test-dev-container || true
