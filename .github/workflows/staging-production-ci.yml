@@ -1,8 +1,8 @@
 name: Staging/Production CI
 
 # This workflow handles CI for staging and production environments:
-# - Runs tests with LocalStack (AWS services emulation)
-# - Builds and tests Docker containers
+# - Runs unit tests (no LocalStack - uses real AWS services)
+# - Builds and tests production Docker containers
 # - Pushes production images to ECR (staging branch only)
 # - Supports both direct pushes and pull requests
 
@@ -37,12 +37,8 @@ env:
   QUEUE_NAME: SoundbiteQueue
   S3_BUCKET: soundbitesbucket
   
-  # LocalStack Configuration
-  LOCALSTACK_ENDPOINT: http://localhost:4566
-  LOCALSTACK_SQS_URL: http://sqs.us-east-1.localhost.localstack.cloud:4566/000000000000/SoundbiteQueue
   
   # Docker Configuration
-  DOCKER_DEV_FILE: ./Dockerfile.dev
   DOCKER_PROD_FILE: ./Dockerfile
   CONTAINER_PORT: 3001
   HEALTH_CHECK_PORT: 3001
@@ -68,16 +64,6 @@ jobs:
        (github.base_ref == 'staging' || github.base_ref == 'master') &&
        !(github.head_ref == 'dev' && github.base_ref == 'master'))
     
-    services:
-      localstack:
-        image: localstack/localstack:3
-        ports: [ "4566:4566" ]
-        env:
-          SERVICES: s3,sqs,dynamodb,sts
-          DEBUG: 0
-        options: >-
-          --health-cmd="curl -s ${{ env.LOCALSTACK_ENDPOINT }}/_localstack/health"
-          --health-interval=10s --health-timeout=5m --health-retries=10
     
     steps:
     # Step 1: Lint, unit test, build
@@ -109,11 +95,9 @@ jobs:
         AWS_REGION: ${{ env.AWS_REGION }}
         AWS_ACCESS_KEY_ID: test
         AWS_SECRET_ACCESS_KEY: test
-        AWS_ENDPOINT: ${{ env.LOCALSTACK_ENDPOINT }}
         TABLE_NAME: ${{ env.TABLE_NAME }}
         QUEUE_NAME: ${{ env.QUEUE_NAME }}
         S3_BUCKET: ${{ env.S3_BUCKET }}
-        SQS_QUEUE_URL: ${{ env.LOCALSTACK_SQS_URL }}
         
     - name: Build application
       run: yarn build
@@ -146,28 +130,24 @@ jobs:
           exit 1
         fi
         
-    # Step 4: Build and Test Docker + AWS infra
-    - name: Build and Test Docker container with AWS infra
+    # Step 4: Build and Test Production Docker image
+    - name: Build and Test Production Docker image
       run: |
-        echo "Building Docker image for ${{ steps.env-info.outputs.tag }} environment..."
-        docker build -f ${{ env.DOCKER_DEV_FILE }} -t soundbite-${{ steps.env-info.outputs.tag }}:latest .
-        echo "✅ Docker image built successfully"
+        echo "Building production Docker image for ${{ steps.env-info.outputs.tag }} environment..."
+        docker build -f ${{ env.DOCKER_PROD_FILE }} -t soundbite-${{ steps.env-info.outputs.tag }}:latest .
+        echo "✅ Production Docker image built successfully"
         
-        echo "Testing Docker container with AWS infrastructure..."
+        echo "Testing production Docker container..."
         
         # Start container
         docker run -d \
           --name test-${{ steps.env-info.outputs.tag }}-container \
           -p ${{ env.CONTAINER_PORT }}:3000 \
-          -e NODE_ENV=development-localstack \
+          -e NODE_ENV=${{ steps.env-info.outputs.environment }} \
           -e AWS_REGION=${{ env.AWS_REGION }} \
-          -e AWS_ACCESS_KEY_ID=test \
-          -e AWS_SECRET_ACCESS_KEY=test \
-          -e AWS_ENDPOINT=${{ env.LOCALSTACK_ENDPOINT }} \
           -e TABLE_NAME=${{ env.TABLE_NAME }} \
           -e QUEUE_NAME=${{ env.QUEUE_NAME }} \
           -e S3_BUCKET=${{ env.S3_BUCKET }} \
-          -e SQS_QUEUE_URL=${{ env.LOCALSTACK_SQS_URL }} \
           soundbite-${{ steps.env-info.outputs.tag }}:latest
         
         # Wait for container to start
@@ -190,15 +170,8 @@ jobs:
         docker stop test-${{ steps.env-info.outputs.tag }}-container || true
         docker rm test-${{ steps.env-info.outputs.tag }}-container || true
         
-    # Step 5: Build production Docker image (for PRs)
-    - name: Build production Docker image for testing
-      if: github.event_name == 'pull_request'
-      run: |
-        echo "Building production Docker image for PR testing..."
-        docker build -f ${{ env.DOCKER_PROD_FILE }} -t soundbite-production-test:latest .
-        echo "✅ Production Docker image built successfully for PR testing"
         
-    # Step 6: Push image to ECR (only on staging branch pushes)
+    # Step 5: Push image to ECR (only on staging branch pushes)
     - name: Configure AWS credentials
       if: github.ref == 'refs/heads/staging'
       uses: aws-actions/configure-aws-credentials@v4
@@ -224,7 +197,7 @@ jobs:
         cache-from: type=gha
         platforms: linux/amd64
         
-    # Step 7: Upload build artifacts
+    # Step 6: Upload build artifacts
     - name: Upload build artifacts
       uses: actions/upload-artifact@v4
       with:
