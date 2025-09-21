@@ -106,7 +106,7 @@ jobs:
     - name: Build and Test Docker container with AWS infra
       run: |
         echo "Building Docker image for ${{ steps.env-info.outputs.tag }} environment..."
-        docker build -f ./Dockerfile -t soundbite-${{ steps.env-info.outputs.tag }}:latest .
+        docker build -f ./Dockerfile.dev -t soundbite-${{ steps.env-info.outputs.tag }}:latest .
         echo "✅ Docker image built successfully"
         
         echo "Testing Docker container with AWS infrastructure..."
