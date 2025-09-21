@@ -110,10 +110,11 @@ jobs:
         APP_PORT=3000
         
         # Set external port mapping to avoid conflicts
+        # Production is already using 3001, so staging uses 3002
         if [[ "$ENVIRONMENT" == "staging" ]]; then
-          EXTERNAL_PORT=3001
-        else
           EXTERNAL_PORT=3002
+        else
+          EXTERNAL_PORT=3001
         fi
         
         echo "🚀 Starting deployment for $ENVIRONMENT..."
