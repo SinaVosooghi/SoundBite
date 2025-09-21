@@ -121,6 +121,22 @@ jobs:
         echo "📦 Image: ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:$IMAGE_TAG"
         echo "🌐 Port: $APP_PORT"
         
+        # Check if staging resources exist before deployment
+        if [[ "$ENVIRONMENT" == "staging" ]]; then
+          echo "🔍 Checking staging resources..."
+          # Check if staging table exists
+          if ! aws dynamodb describe-table --table-name SoundBite-staging-SoundbitesTable --region us-east-1 >/dev/null 2>&1; then
+            echo "❌ Staging table does not exist. Please deploy staging infrastructure first."
+            exit 1
+          fi
+          # Check if staging S3 bucket exists
+          if ! aws s3 ls s3://soundbite-staging-soundbites-762233763891/ --region us-east-1 >/dev/null 2>&1; then
+            echo "❌ Staging S3 bucket does not exist. Please deploy staging infrastructure first."
+            exit 1
+          fi
+          echo "✅ Staging resources verified"
+        fi
+
         # Execute deployment commands directly on EC2
         COMMAND_ID=$(aws ssm send-command \
           --instance-ids ${{ steps.env-info.outputs.ec2-instance-id }} \
@@ -134,8 +150,16 @@ jobs:
             \"docker stop soundbite-$ENVIRONMENT || true\",
             \"docker rm soundbite-$ENVIRONMENT || true\",
             \"echo \\\"▶️ Starting new container...\\\"\",
-            \"# Use shared development resources for MVP (zero cost approach)\",
-            \"docker run -d --name soundbite-$ENVIRONMENT --restart unless-stopped -p $EXTERNAL_PORT:3000 -e NODE_ENV=$NODE_ENV -e ENVIRONMENT=$ENVIRONMENT -e AWS_REGION=us-east-1 -e TABLE_NAME=SoundBite-development-SoundbitesTable -e QUEUE_NAME=SoundBite-MultiEnv-SoundbiteQueue -e S3_BUCKET=soundbite-development-soundbites-762233763891 -e SQS_QUEUE_URL=https://sqs.us-east-1.amazonaws.com/762233763891/SoundBite-MultiEnv-SoundbiteQueue ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:$IMAGE_TAG\",
+            \"# Use environment-specific resources as per CDK stack pattern\",
+            \"if [[ \\\"$ENVIRONMENT\\\" == \\\"staging\\\" ]]; then\",
+            \"  TABLE_NAME=SoundBite-staging-SoundbitesTable\",
+            \"  S3_BUCKET=soundbite-staging-soundbites-762233763891\",
+            \"else\",
+            \"  TABLE_NAME=SoundBite-development-SoundbitesTable\",
+            \"  S3_BUCKET=soundbite-development-soundbites-762233763891\",
+            \"fi\",
+            \"echo \\\"Using resources: TABLE_NAME=$TABLE_NAME, S3_BUCKET=$S3_BUCKET\\\"\",
+            \"docker run -d --name soundbite-$ENVIRONMENT --restart unless-stopped -p $EXTERNAL_PORT:3000 -e NODE_ENV=$NODE_ENV -e ENVIRONMENT=$ENVIRONMENT -e AWS_REGION=us-east-1 -e TABLE_NAME=$TABLE_NAME -e QUEUE_NAME=SoundBite-MultiEnv-SoundbiteQueue -e S3_BUCKET=$S3_BUCKET -e SQS_QUEUE_URL=https://sqs.us-east-1.amazonaws.com/762233763891/SoundBite-MultiEnv-SoundbiteQueue ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:$IMAGE_TAG\",
             \"echo \\\"⏳ Waiting for health check...\\\"\",
             \"for i in {1..30}; do if curl -s http://localhost:$EXTERNAL_PORT/health > /dev/null 2>&1; then echo \\\"✅ Deployment successful!\\\"; break; fi; echo \\\"Waiting for health check... (\\\$i/30)\\\"; sleep 2; done\",
             \"echo \\\"🧹 Cleaning up old images...\\\"\",
