@@ -107,9 +107,9 @@ jobs:
         
         # Set port based on environment
         if [[ "$ENVIRONMENT" == "staging" ]]; then
-          APP_PORT=3001
-        else
           APP_PORT=3000
+        else
+          APP_PORT=3001
         fi
         
         echo "🚀 Starting deployment for $ENVIRONMENT..."
