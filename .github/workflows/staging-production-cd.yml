@@ -30,7 +30,7 @@ jobs:
     - name: Configure AWS credentials
       uses: aws-actions/configure-aws-credentials@v4
       with:
-        role-to-assume: arn:aws:iam::762233763891:role/GitHubActionsRole
+        role-to-assume: arn:aws:iam::762233763891:role/GitHubActions-SoundBite-Prod
         aws-region: ${{ env.AWS_REGION }}
         
     - name: Determine environment
@@ -39,15 +39,15 @@ jobs:
         if [[ "${{ github.event.workflow_run.head_branch }}" == "master" ]]; then
           echo "environment=production" >> $GITHUB_OUTPUT
           echo "tag=production" >> $GITHUB_OUTPUT
-          echo "ec2-instance-id=i-1234567890abcdef0" >> $GITHUB_OUTPUT  # Replace with actual production instance ID
+          echo "ec2-instance-id=i-0e42eb553386cc529" >> $GITHUB_OUTPUT  # Shared instance for MVP
         elif [[ "${{ github.event.workflow_run.head_branch }}" == "staging" ]]; then
           echo "environment=staging" >> $GITHUB_OUTPUT
           echo "tag=staging" >> $GITHUB_OUTPUT
-          echo "ec2-instance-id=i-0987654321fedcba0" >> $GITHUB_OUTPUT  # Replace with actual staging instance ID
+          echo "ec2-instance-id=i-0e42eb553386cc529" >> $GITHUB_OUTPUT  # Shared instance for MVP
         else
           echo "environment=staging" >> $GITHUB_OUTPUT
           echo "tag=staging" >> $GITHUB_OUTPUT
-          echo "ec2-instance-id=i-0987654321fedcba0" >> $GITHUB_OUTPUT  # Replace with actual staging instance ID
+          echo "ec2-instance-id=i-0e42eb553386cc529" >> $GITHUB_OUTPUT  # Shared instance for MVP
         fi
         
     - name: Get latest image tag
@@ -87,18 +87,30 @@ jobs:
         
         # Start new container
         echo "▶️ Starting new container..."
+        if [[ "$ENVIRONMENT" == "staging" ]]; then
+          APP_PORT=3001
+        else
+          APP_PORT=3000
+        fi
+        
         docker run -d \
           --name soundbite-$ENVIRONMENT \
           --restart unless-stopped \
-          -p 3000:3000 \
+          -p $APP_PORT:3000 \
           -e NODE_ENV=$ENVIRONMENT \
           -e AWS_REGION=$AWS_REGION \
+          -e AWS_ACCESS_KEY_ID=$AWS_ACCESS_KEY_ID \
+          -e AWS_SECRET_ACCESS_KEY=$AWS_SECRET_ACCESS_KEY \
+          -e TABLE_NAME=SoundbitesTable \
+          -e QUEUE_NAME=SoundbiteQueue \
+          -e S3_BUCKET=soundbitesbucket \
+          -e SQS_QUEUE_URL=https://sqs.us-east-1.amazonaws.com/762233763891/SoundbiteQueue \
           $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
         
         # Wait for health check
         echo "⏳ Waiting for health check..."
         for i in {1..30}; do
-          if curl -s http://localhost:3000/health > /dev/null 2>&1; then
+          if curl -s http://localhost:$APP_PORT/health > /dev/null 2>&1; then
             echo "✅ Deployment successful!"
             break
           fi
@@ -146,9 +158,16 @@ jobs:
         
         echo "EC2 Public IP: $EC2_IP"
         
+        # Determine port based on environment
+        if [[ "${{ steps.env-info.outputs.environment }}" == "staging" ]]; then
+          APP_PORT=3001
+        else
+          APP_PORT=3000
+        fi
+        
         # Test health endpoint
         for i in {1..10}; do
-          if curl -s http://$EC2_IP:3000/health > /dev/null 2>&1; then
+          if curl -s http://$EC2_IP:$APP_PORT/health > /dev/null 2>&1; then
             echo "✅ Health check passed!"
             break
           fi
@@ -157,7 +176,7 @@ jobs:
         done
         
         # Test API endpoint
-        curl -f http://$EC2_IP:3000/health
+        curl -f http://$EC2_IP:$APP_PORT/health
         echo "✅ API endpoint is responding!"
         
     - name: Notify deployment status
