@@ -78,7 +78,7 @@ jobs:
     - name: Test dev server with LocalStack
       run: |
         echo "Starting dev server with LocalStack integration..."
-        timeout 30s yarn dev &
+        timeout 30s yarn start:dev &
         DEV_PID=$!
         
         # Wait for server to start
