@@ -1,10 +1,8 @@
 name: Staging/Production CD
 
 on:
-  workflow_run:
-    workflows: ["Staging/Production CI"]
-    types: [completed]
-    branches: [ staging, master ]
+  repository_dispatch:
+    types: [ci-completed]
   workflow_dispatch:
     inputs:
       environment:
@@ -35,7 +33,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     if: |
-      (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success') ||
+      github.event_name == 'repository_dispatch' ||
       github.event_name == 'workflow_dispatch'
     
     steps:
@@ -62,21 +60,27 @@ jobs:
       id: env-info
       run: |
         # Determine environment based on trigger type
-        if [[ "${{ github.event_name }}" == "workflow_run" ]]; then
-          BRANCH="${{ github.event.workflow_run.head_branch }}"
+        if [[ "${{ github.event_name }}" == "repository_dispatch" ]]; then
+          ENVIRONMENT="${{ github.event.client_payload.environment }}"
+          TAG="${{ github.event.client_payload.tag }}"
+        elif [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+          ENVIRONMENT="${{ github.event.inputs.environment }}"
+          TAG="${{ github.event.inputs.environment }}"
         else
           BRANCH="${GITHUB_REF#refs/heads/}"
+          if [[ "$BRANCH" == "master" ]]; then
+            ENVIRONMENT="production"
+            TAG="production"
+          else
+            ENVIRONMENT="staging"
+            TAG="staging"
+          fi
         fi
         
-        if [[ "$BRANCH" == "master" ]]; then
+        if [[ "$ENVIRONMENT" == "production" ]]; then
           echo "environment=production" >> $GITHUB_OUTPUT
           echo "tag=production" >> $GITHUB_OUTPUT
           echo "node-env=production" >> $GITHUB_OUTPUT
-          echo "ec2-instance-id=i-0e42eb553386cc529" >> $GITHUB_OUTPUT  # Shared instance for MVP
-        elif [[ "$BRANCH" == "staging" ]]; then
-          echo "environment=staging" >> $GITHUB_OUTPUT
-          echo "tag=staging" >> $GITHUB_OUTPUT
-          echo "node-env=staging" >> $GITHUB_OUTPUT
           echo "ec2-instance-id=i-0e42eb553386cc529" >> $GITHUB_OUTPUT  # Shared instance for MVP
         else
           echo "environment=staging" >> $GITHUB_OUTPUT
