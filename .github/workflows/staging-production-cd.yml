@@ -143,6 +143,7 @@ jobs:
             \"  S3_BUCKET=soundbite-development-soundbites-762233763891\",
             \"  SQS_QUEUE_URL=https://sqs.us-east-1.amazonaws.com/762233763891/SoundBite-MultiEnv-SoundbiteQueue\",
             \"fi\",
+            \"echo \\\"Environment variables: TABLE_NAME=$TABLE_NAME, S3_BUCKET=$S3_BUCKET, SQS_QUEUE_URL=$SQS_QUEUE_URL\\\"\",
             \"docker run -d --name soundbite-$ENVIRONMENT --restart unless-stopped -p $EXTERNAL_PORT:3000 -e NODE_ENV=$NODE_ENV -e AWS_REGION=us-east-1 -e TABLE_NAME=$TABLE_NAME -e QUEUE_NAME=SoundBite-MultiEnv-SoundbiteQueue -e S3_BUCKET=$S3_BUCKET -e SQS_QUEUE_URL=$SQS_QUEUE_URL ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:$IMAGE_TAG\",
             \"echo \\\"⏳ Waiting for health check...\\\"\",
             \"for i in {1..30}; do if curl -s http://localhost:$EXTERNAL_PORT/health > /dev/null 2>&1; then echo \\\"✅ Deployment successful!\\\"; break; fi; echo \\\"Waiting for health check... (\\\$i/30)\\\"; sleep 2; done\",
