@@ -165,10 +165,14 @@ jobs:
         
         # Execute deployment on EC2
         echo "📤 Executing deployment on EC2..."
+        
+        # Read the script content and escape it for JSON
+        SCRIPT_CONTENT=$(cat deploy.sh | sed 's/"/\\"/g' | tr '\n' '\\' | sed 's/\\$//')
+        
         COMMAND_ID=$(aws ssm send-command \
           --instance-ids ${{ steps.env-info.outputs.ec2-instance-id }} \
           --document-name "AWS-RunShellScript" \
-          --parameters 'commands=["bash -s"]' \
+          --parameters "commands=[\"$SCRIPT_CONTENT\"]" \
           --region ${{ env.AWS_REGION }} \
           --query 'Command.CommandId' \
           --output text)
