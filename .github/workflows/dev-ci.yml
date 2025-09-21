@@ -1,0 +1,170 @@
+name: Dev CI
+
+on:
+  push:
+    branches: [ dev ]
+  pull_request:
+    branches: [ dev ]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: '22'
+  YARN_VERSION: '4.9.4'
+  AWS_REGION: us-east-1
+
+jobs:
+  test-and-build:
+    name: Test, Build, and Validate Dev Environment
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    
+    services:
+      localstack:
+        image: localstack/localstack:3
+        ports: [ "4566:4566" ]
+        env:
+          SERVICES: s3,sqs,dynamodb,sts
+          DEBUG: 0
+        options: >-
+          --health-cmd="curl -s http://localhost:4566/_localstack/health"
+          --health-interval=10s --health-timeout=5m --health-retries=10
+    
+    steps:
+    # Step 1: Lint, unit test, build
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ env.NODE_VERSION }}
+        cache: 'yarn'
+        
+    - name: Enable Corepack
+      run: corepack enable
+        
+    - name: Setup Yarn
+      run: corepack prepare yarn@${{ env.YARN_VERSION }} --activate
+        
+    - name: Install dependencies
+      run: yarn install --immutable
+      
+    - name: Run linting
+      run: yarn lint
+      
+    - name: Run tests
+      run: yarn test
+      env:
+        NODE_ENV: test
+        AWS_REGION: us-east-1
+        AWS_ACCESS_KEY_ID: test
+        AWS_SECRET_ACCESS_KEY: test
+        AWS_ENDPOINT: http://localhost:4566
+        TABLE_NAME: SoundbitesTable
+        QUEUE_NAME: SoundbiteQueue
+        S3_BUCKET: soundbitesbucket
+        SQS_QUEUE_URL: http://sqs.us-east-1.localhost.localstack.cloud:4566/000000000000/SoundbiteQueue
+        
+    - name: Build application
+      run: yarn build
+      
+    # Step 2: Start dev server with LocalStack (test integration)
+    - name: Test dev server with LocalStack
+      run: |
+        echo "Starting dev server with LocalStack integration..."
+        timeout 30s yarn dev &
+        DEV_PID=$!
+        
+        # Wait for server to start
+        for i in {1..30}; do
+          if curl -s http://localhost:3000/health > /dev/null 2>&1; then
+            echo "✅ Dev server started successfully"
+            break
+          fi
+          echo "Waiting for dev server... ($i/30)"
+          sleep 2
+        done
+        
+        # Test health endpoint
+        curl -f http://localhost:3000/health
+        
+        # Clean up
+        kill $DEV_PID 2>/dev/null || true
+      env:
+        NODE_ENV: development-localstack
+        AWS_REGION: us-east-1
+        AWS_ACCESS_KEY_ID: test
+        AWS_SECRET_ACCESS_KEY: test
+        AWS_ENDPOINT: http://localhost:4566
+        TABLE_NAME: SoundbitesTable
+        QUEUE_NAME: SoundbiteQueue
+        S3_BUCKET: soundbitesbucket
+        SQS_QUEUE_URL: http://sqs.us-east-1.localhost.localstack.cloud:4566/000000000000/SoundbiteQueue
+        
+    # Step 3: Build Docker image
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+      
+    - name: Build Docker image (dev)
+      uses: docker/build-push-action@v5
+      with:
+        context: .
+        file: ./Dockerfile.dev
+        push: false
+        tags: soundbite-dev:latest
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+        platforms: linux/amd64
+        
+    # Step 4: Test Docker + AWS infra
+    - name: Test Docker container with AWS infra
+      run: |
+        echo "Testing Docker container with AWS infrastructure..."
+        
+        # Start container
+        docker run -d \
+          --name test-dev-container \
+          -p 3001:3000 \
+          -e NODE_ENV=development-localstack \
+          -e AWS_REGION=us-east-1 \
+          -e AWS_ACCESS_KEY_ID=test \
+          -e AWS_SECRET_ACCESS_KEY=test \
+          -e AWS_ENDPOINT=http://host.docker.internal:4566 \
+          -e TABLE_NAME=SoundbitesTable \
+          -e QUEUE_NAME=SoundbiteQueue \
+          -e S3_BUCKET=soundbitesbucket \
+          -e SQS_QUEUE_URL=http://sqs.us-east-1.localhost.localstack.cloud:4566/000000000000/SoundbiteQueue \
+          soundbite-dev:latest
+        
+        # Wait for container to start
+        for i in {1..30}; do
+          if curl -s http://localhost:3001/health > /dev/null 2>&1; then
+            echo "✅ Docker container started successfully"
+            break
+          fi
+          echo "Waiting for container... ($i/30)"
+          sleep 2
+        done
+        
+        # Test health endpoint
+        curl -f http://localhost:3001/health
+        
+        # Test API endpoint
+        curl -f http://localhost:3001/
+        
+        # Clean up
+        docker stop test-dev-container || true
+        docker rm test-dev-container || true
+        
+    - name: Upload build artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: dev-build-artifacts
+        path: dist/
+        retention-days: 1

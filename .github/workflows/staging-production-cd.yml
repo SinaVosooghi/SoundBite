@@ -1,0 +1,170 @@
+name: Staging/Production CD
+
+on:
+  workflow_run:
+    workflows: ["Staging/Production CI"]
+    types: [completed]
+    branches: [ staging, master ]
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  AWS_REGION: us-east-1
+  ECR_REGISTRY: 762233763891.dkr.ecr.us-east-1.amazonaws.com
+  ECR_REPOSITORY: soundbite-development-api
+
+jobs:
+  deploy:
+    name: Deploy to Environment
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    
+    steps:
+    # Step 6: Pull image from ECR to EC2 and restart server
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        role-to-assume: arn:aws:iam::762233763891:role/GitHubActionsRole
+        aws-region: ${{ env.AWS_REGION }}
+        
+    - name: Determine environment
+      id: env-info
+      run: |
+        if [[ "${{ github.event.workflow_run.head_branch }}" == "master" ]]; then
+          echo "environment=production" >> $GITHUB_OUTPUT
+          echo "tag=production" >> $GITHUB_OUTPUT
+          echo "ec2-instance-id=i-1234567890abcdef0" >> $GITHUB_OUTPUT  # Replace with actual production instance ID
+        elif [[ "${{ github.event.workflow_run.head_branch }}" == "staging" ]]; then
+          echo "environment=staging" >> $GITHUB_OUTPUT
+          echo "tag=staging" >> $GITHUB_OUTPUT
+          echo "ec2-instance-id=i-0987654321fedcba0" >> $GITHUB_OUTPUT  # Replace with actual staging instance ID
+        else
+          echo "environment=staging" >> $GITHUB_OUTPUT
+          echo "tag=staging" >> $GITHUB_OUTPUT
+          echo "ec2-instance-id=i-0987654321fedcba0" >> $GITHUB_OUTPUT  # Replace with actual staging instance ID
+        fi
+        
+    - name: Get latest image tag
+      id: image-tag
+      run: |
+        # Get the latest image tag from ECR
+        IMAGE_TAG=$(aws ecr describe-images \
+          --repository-name ${{ env.ECR_REPOSITORY }} \
+          --image-ids imageTag=${{ steps.env-info.outputs.tag }} \
+          --query 'imageDetails[0].imageTags[0]' \
+          --output text)
+        echo "tag=$IMAGE_TAG" >> $GITHUB_OUTPUT
+        echo "Using image tag: $IMAGE_TAG"
+        
+    - name: Deploy to EC2
+      run: |
+        echo "Deploying ${{ steps.env-info.outputs.environment }} to EC2..."
+        
+        # Create deployment script
+        cat > deploy.sh << 'EOF'
+        #!/bin/bash
+        set -e
+        
+        echo "🚀 Starting deployment..."
+        
+        # Login to ECR
+        aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin $ECR_REGISTRY
+        
+        # Pull latest image
+        echo "📦 Pulling latest image..."
+        docker pull $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+        
+        # Stop existing container
+        echo "🛑 Stopping existing container..."
+        docker stop soundbite-$ENVIRONMENT || true
+        docker rm soundbite-$ENVIRONMENT || true
+        
+        # Start new container
+        echo "▶️ Starting new container..."
+        docker run -d \
+          --name soundbite-$ENVIRONMENT \
+          --restart unless-stopped \
+          -p 3000:3000 \
+          -e NODE_ENV=$ENVIRONMENT \
+          -e AWS_REGION=$AWS_REGION \
+          $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+        
+        # Wait for health check
+        echo "⏳ Waiting for health check..."
+        for i in {1..30}; do
+          if curl -s http://localhost:3000/health > /dev/null 2>&1; then
+            echo "✅ Deployment successful!"
+            break
+          fi
+          echo "Waiting for health check... ($i/30)"
+          sleep 2
+        done
+        
+        # Clean up old images
+        echo "🧹 Cleaning up old images..."
+        docker image prune -f
+        
+        echo "🎉 Deployment completed!"
+        EOF
+        
+        # Make script executable
+        chmod +x deploy.sh
+        
+        # Execute deployment on EC2
+        aws ssm send-command \
+          --instance-ids ${{ steps.env-info.outputs.ec2-instance-id }} \
+          --document-name "AWS-RunShellScript" \
+          --parameters 'commands=["bash -s"]' \
+          --cli-input-json file://<(cat << EOF
+        {
+          "commands": ["bash -s"],
+          "workingDirectory": ["/home/ubuntu"],
+          "executionTimeout": ["3600"]
+        }
+        EOF
+        ) \
+          --region ${{ env.AWS_REGION }}
+        
+        # Alternative: Use SSH if SSM is not available
+        # ssh -o StrictHostKeyChecking=no ubuntu@$EC2_IP 'bash -s' < deploy.sh
+        
+    - name: Verify deployment
+      run: |
+        echo "🔍 Verifying deployment..."
+        
+        # Get EC2 instance public IP
+        EC2_IP=$(aws ec2 describe-instances \
+          --instance-ids ${{ steps.env-info.outputs.ec2-instance-id }} \
+          --query 'Reservations[0].Instances[0].PublicIpAddress' \
+          --output text)
+        
+        echo "EC2 Public IP: $EC2_IP"
+        
+        # Test health endpoint
+        for i in {1..10}; do
+          if curl -s http://$EC2_IP:3000/health > /dev/null 2>&1; then
+            echo "✅ Health check passed!"
+            break
+          fi
+          echo "Waiting for health check... ($i/10)"
+          sleep 10
+        done
+        
+        # Test API endpoint
+        curl -f http://$EC2_IP:3000/health
+        echo "✅ API endpoint is responding!"
+        
+    - name: Notify deployment status
+      if: always()
+      run: |
+        if [ "${{ job.status }}" == "success" ]; then
+          echo "✅ ${{ steps.env-info.outputs.environment }} deployment successful!"
+        else
+          echo "❌ ${{ steps.env-info.outputs.environment }} deployment failed!"
+        fi
