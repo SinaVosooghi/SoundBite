@@ -130,8 +130,7 @@ jobs:
         # Start container with proper networking for GitHub Actions
         docker run -d \
           --name test-dev-container \
-          --network host \
-          -p 3000:3000 \
+          -p 3001:3000 \
           -e NODE_ENV=development-localstack \
           -e AWS_REGION=us-east-1 \
           -e AWS_ACCESS_KEY_ID=test \
@@ -145,7 +144,7 @@ jobs:
         
         # Wait for container to start
         for i in {1..30}; do
-          if curl -s http://localhost:3000/health > /dev/null 2>&1; then
+          if curl -s http://localhost:3001/health > /dev/null 2>&1; then
             echo "✅ Docker container started successfully"
             break
           fi
@@ -154,10 +153,10 @@ jobs:
         done
         
         # Test health endpoint
-        curl -f http://localhost:3000/health
+        curl -f http://localhost:3001/health
         
         # Test API endpoint
-        curl -f http://localhost:3000/
+        curl -f http://localhost:3001/
         
         # Clean up
         docker stop test-dev-container || true
