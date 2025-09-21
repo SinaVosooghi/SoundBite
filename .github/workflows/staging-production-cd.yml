@@ -166,13 +166,26 @@ jobs:
         # Execute deployment on EC2
         echo "📤 Executing deployment on EC2..."
         
-        # Read the script content and escape it for JSON
-        SCRIPT_CONTENT=$(cat deploy.sh | sed 's/"/\\"/g' | tr '\n' '\\' | sed 's/\\$//')
-        
+        # Execute deployment commands directly
         COMMAND_ID=$(aws ssm send-command \
           --instance-ids ${{ steps.env-info.outputs.ec2-instance-id }} \
           --document-name "AWS-RunShellScript" \
-          --parameters "commands=[\"$SCRIPT_CONTENT\"]" \
+          --parameters 'commands=[
+            "echo \"🚀 Starting deployment...\"",
+            "aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin 762233763891.dkr.ecr.us-east-1.amazonaws.com",
+            "echo \"📦 Pulling latest image...\"",
+            "docker pull 762233763891.dkr.ecr.us-east-1.amazonaws.com/soundbite-development-api:staging",
+            "echo \"🛑 Stopping existing container...\"",
+            "docker stop soundbite-staging || true",
+            "docker rm soundbite-staging || true",
+            "echo \"▶️ Starting new container...\"",
+            "docker run -d --name soundbite-staging --restart unless-stopped -p 3000:3000 -e NODE_ENV=staging -e AWS_REGION=us-east-1 -e AWS_ACCESS_KEY_ID=$AWS_ACCESS_KEY_ID -e AWS_SECRET_ACCESS_KEY=$AWS_SECRET_ACCESS_KEY -e TABLE_NAME=SoundBite-development-SoundbitesTable -e QUEUE_NAME=SoundBite-MultiEnv-SoundbiteQueue -e S3_BUCKET=soundbite-development-soundbites-762233763891 -e SQS_QUEUE_URL=https://sqs.us-east-1.amazonaws.com/762233763891/SoundBite-MultiEnv-SoundbiteQueue 762233763891.dkr.ecr.us-east-1.amazonaws.com/soundbite-development-api:staging",
+            "echo \"⏳ Waiting for health check...\"",
+            "for i in {1..30}; do if curl -s http://localhost:3000/health > /dev/null 2>&1; then echo \"✅ Deployment successful!\"; break; fi; echo \"Waiting for health check... ($i/30)\"; sleep 2; done",
+            "echo \"🧹 Cleaning up old images...\"",
+            "docker image prune -f",
+            "echo \"🎉 Deployment completed!\""
+          ]' \
           --region ${{ env.AWS_REGION }} \
           --query 'Command.CommandId' \
           --output text)
