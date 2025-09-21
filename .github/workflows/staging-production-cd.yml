@@ -135,10 +135,10 @@ jobs:
            -e AWS_REGION=$AWS_REGION \
            -e AWS_ACCESS_KEY_ID=$AWS_ACCESS_KEY_ID \
            -e AWS_SECRET_ACCESS_KEY=$AWS_SECRET_ACCESS_KEY \
-           -e TABLE_NAME=SoundBite-${{ steps.env-info.outputs.node-env }}-SoundbitesTable \
-           -e QUEUE_NAME=SoundBite-${{ steps.env-info.outputs.node-env }}-SoundbiteQueue \
-           -e S3_BUCKET=soundbite-${{ steps.env-info.outputs.node-env }}-soundbites-762233763891 \
-           -e SQS_QUEUE_URL=https://sqs.us-east-1.amazonaws.com/762233763891/SoundBite-${{ steps.env-info.outputs.node-env }}-SoundbiteQueue \
+           -e TABLE_NAME=SoundBite-development-SoundbitesTable \
+           -e QUEUE_NAME=SoundBite-MultiEnv-SoundbiteQueue \
+           -e S3_BUCKET=soundbite-development-soundbites-762233763891 \
+           -e SQS_QUEUE_URL=https://sqs.us-east-1.amazonaws.com/762233763891/SoundBite-MultiEnv-SoundbiteQueue \
           $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
         
         # Wait for health check
