@@ -120,13 +120,22 @@ export class EnvironmentLoader {
           return stagingConfig;
         case 'production':
           return productionConfig;
+        case 'development':
+          // If ENVIRONMENT is development, check NODE_ENV for more specific configuration
+          if (nodeEnv === 'development-localstack') {
+            return developmentLocalStackConfig;
+          } else if (nodeEnv === 'development-aws') {
+            return developmentAWSConfig;
+          } else {
+            return developmentLocalStackConfig; // default for development
+          }
         default:
           return stagingConfig; // fallback
       }
     }
 
     // Check if running locally
-    if (nodeEnv === 'development') {
+    if (nodeEnv === 'development' || nodeEnv === 'development-localstack') {
       if (awsConnectionMode === 'aws') {
         return developmentAWSConfig;
       } else {
