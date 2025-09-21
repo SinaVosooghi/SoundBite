@@ -1,8 +1,6 @@
 name: Staging/Production CD
 
 on:
-  push:
-    branches: [ staging, master ]
   workflow_run:
     workflows: ["Staging/Production CI"]
     types: [completed]
@@ -33,7 +31,6 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     if: |
-      github.event_name == 'push' || 
       (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success') ||
       github.event_name == 'workflow_dispatch'
     
@@ -41,16 +38,6 @@ jobs:
     # Step 6: Pull image from ECR to EC2 and restart server
     - name: Checkout code
       uses: actions/checkout@v4
-
-    - name: Verify CI Success
-      if: github.event_name == 'push'
-      run: |
-        echo "🔍 Verifying deployment conditions..."
-        BRANCH_NAME=${GITHUB_REF#refs/heads/}
-        echo "Branch: $BRANCH_NAME"
-        echo "✅ Proceeding with deployment to $BRANCH_NAME"
-        echo "ℹ️  Note: Ensure CI has passed before deploying"
-      
     - name: Configure AWS credentials
       uses: aws-actions/configure-aws-credentials@v4
       with:
