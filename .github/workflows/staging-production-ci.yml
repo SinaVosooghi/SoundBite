@@ -158,21 +158,18 @@ jobs:
         docker stop test-${{ steps.env-info.outputs.tag }}-container || true
         docker rm test-${{ steps.env-info.outputs.tag }}-container || true
         
-    # Step 5: Push image to ECR (only on push, not PR)
+    # Step 5: Push image to ECR (on both push and PR events)
     - name: Configure AWS credentials
-      if: github.event_name == 'push'
       uses: aws-actions/configure-aws-credentials@v4
       with:
         role-to-assume: arn:aws:iam::762233763891:role/GitHubActionsRole
         aws-region: ${{ env.AWS_REGION }}
         
     - name: Login to Amazon ECR
-      if: github.event_name == 'push'
       id: login-ecr
       uses: aws-actions/amazon-ecr-login@v2
       
     - name: Push Docker image to ECR
-      if: github.event_name == 'push'
       uses: docker/build-push-action@v5
       with:
         context: .
