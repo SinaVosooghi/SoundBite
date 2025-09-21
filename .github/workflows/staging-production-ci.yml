@@ -86,10 +86,7 @@ jobs:
     - name: Build application
       run: yarn build
       
-    # Step 3: Build Docker image
-    - name: Set up Docker Buildx
-      uses: docker/setup-buildx-action@v3
-      
+    # Step 3: Determine environment and tags
     - name: Determine environment and tags
       id: env-info
       run: |
