@@ -205,11 +205,3 @@ jobs:
         path: dist/
         retention-days: 7
 
-    # Step 7: Trigger CD workflow
-    - name: Trigger CD workflow
-      if: github.event_name == 'push'
-      uses: peter-evans/repository-dispatch@v3
-      with:
-        token: ${{ secrets.GITHUB_TOKEN }}
-        event-type: ci-completed
-        client-payload: '{"environment": "${{ steps.env-info.outputs.environment }}", "tag": "${{ steps.env-info.outputs.tag }}"}'

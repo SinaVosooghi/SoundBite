@@ -1,0 +1,23 @@
+{
+  "ref": "refs/heads/staging",
+  "head_ref": "staging",
+  "base_ref": "staging",
+  "event_name": "push",
+  "repository": {
+    "name": "SoundBite",
+    "owner": {
+      "login": "SinaVosooghi"
+    }
+  },
+  "pusher": {
+    "name": "SinaVosooghi",
+    "email": "sina@example.com"
+  },
+  "commits": [
+    {
+      "id": "abc123",
+      "message": "test staging CD workflow",
+      "timestamp": "2025-09-21T17:00:00Z"
+    }
+  ]
+}
