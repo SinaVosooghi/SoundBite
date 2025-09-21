@@ -1,9 +1,7 @@
 name: Staging/Production CD
 
 on:
-  workflow_run:
-    workflows: ["Staging/Production CI"]
-    types: [completed]
+  push:
     branches: [ staging, master ]
   workflow_dispatch:
     inputs:
@@ -31,6 +29,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     if: |
+      github.event_name == 'push' ||
       (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success') ||
       github.event_name == 'workflow_dispatch'
     
@@ -38,6 +37,41 @@ jobs:
     # Step 6: Pull image from ECR to EC2 and restart server
     - name: Checkout code
       uses: actions/checkout@v4
+
+    - name: Verify CI Success
+      if: github.event_name == 'push'
+      run: |
+        echo "🔍 Verifying CI has passed before deployment..."
+        
+        # Get the latest CI run for this branch
+        CI_RUNS=$(gh run list --workflow=staging-production-ci.yml --branch=${{ github.ref_name }} --limit 1 --json conclusion,status)
+        CI_CONCLUSION=$(echo "$CI_RUNS" | jq -r '.[0].conclusion')
+        CI_STATUS=$(echo "$CI_RUNS" | jq -r '.[0].status')
+        
+        echo "Latest CI run status: $CI_STATUS"
+        echo "Latest CI run conclusion: $CI_CONCLUSION"
+        
+        if [[ "$CI_STATUS" != "completed" || "$CI_CONCLUSION" != "success" ]]; then
+          echo "❌ CI has not passed yet. Status: $CI_STATUS, Conclusion: $CI_CONCLUSION"
+          echo "⏳ Waiting 30 seconds and checking again..."
+          sleep 30
+          
+          # Check again
+          CI_RUNS=$(gh run list --workflow=staging-production-ci.yml --branch=${{ github.ref_name }} --limit 1 --json conclusion,status)
+          CI_CONCLUSION=$(echo "$CI_RUNS" | jq -r '.[0].conclusion')
+          CI_STATUS=$(echo "$CI_RUNS" | jq -r '.[0].status')
+          
+          echo "Second check - CI run status: $CI_STATUS"
+          echo "Second check - CI run conclusion: $CI_CONCLUSION"
+          
+          if [[ "$CI_STATUS" != "completed" || "$CI_CONCLUSION" != "success" ]]; then
+            echo "❌ CI still has not passed. Aborting deployment."
+            exit 1
+          fi
+        fi
+        
+        echo "✅ CI has passed. Proceeding with deployment to ${{ github.ref_name }}"
+      
     - name: Configure AWS credentials
       uses: aws-actions/configure-aws-credentials@v4
       with:
