@@ -5,6 +5,7 @@ on:
     branches: [ staging, master ]
   pull_request:
     branches: [ staging, master ]
+    types: [ opened, synchronize, reopened ]
 
 permissions:
   contents: read
@@ -26,6 +27,8 @@ jobs:
     name: Test, Build, and Push to ECR
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    # Only run on staging/master branches or PRs targeting them
+    if: github.ref == 'refs/heads/staging' || github.ref == 'refs/heads/master' || (github.event_name == 'pull_request' && (github.base_ref == 'staging' || github.base_ref == 'master'))
     
     services:
       localstack:
@@ -96,22 +99,13 @@ jobs:
           exit 1
         fi
         
-    - name: Build Docker image
-      uses: docker/build-push-action@v5
-      with:
-        context: .
-        file: ./Dockerfile
-        push: false
-        tags: |
-          soundbite-${{ steps.env-info.outputs.tag }}:latest
-          soundbite-${{ steps.env-info.outputs.tag }}:${{ github.sha }}
-        cache-from: type=gha
-        cache-to: type=gha,mode=max
-        platforms: linux/amd64
-        
-    # Step 4: Test Docker + AWS infra
-    - name: Test Docker container with AWS infra
+    # Step 4: Build and Test Docker + AWS infra
+    - name: Build and Test Docker container with AWS infra
       run: |
+        echo "Building Docker image for ${{ steps.env-info.outputs.tag }} environment..."
+        docker build -f ./Dockerfile -t soundbite-${{ steps.env-info.outputs.tag }}:latest .
+        echo "✅ Docker image built successfully"
+        
         echo "Testing Docker container with AWS infrastructure..."
         
         # Start container
@@ -122,7 +116,7 @@ jobs:
           -e AWS_REGION=us-east-1 \
           -e AWS_ACCESS_KEY_ID=test \
           -e AWS_SECRET_ACCESS_KEY=test \
-          -e AWS_ENDPOINT=http://host.docker.internal:4566 \
+          -e AWS_ENDPOINT=http://localhost:4566 \
           -e TABLE_NAME=SoundbitesTable \
           -e QUEUE_NAME=SoundbiteQueue \
           -e S3_BUCKET=soundbitesbucket \
