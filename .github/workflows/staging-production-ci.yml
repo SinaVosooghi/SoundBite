@@ -3,6 +3,9 @@ name: Staging/Production CI
 on:
   push:
     branches: [ staging, master ]
+  pull_request:
+    branches: [ staging, master ]
+    types: [ opened, synchronize, reopened ]
 
 permissions:
   contents: read
@@ -24,8 +27,14 @@ jobs:
     name: Test, Build, and Push to ECR
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    # Only run on staging/master branches
-    if: github.ref == 'refs/heads/staging' || github.ref == 'refs/heads/master'
+    # Only run on staging/master branches or PRs targeting them
+    # Skip if PR is from dev to master (should go through staging first)
+    if: |
+      github.ref == 'refs/heads/staging' || 
+      github.ref == 'refs/heads/master' || 
+      (github.event_name == 'pull_request' && 
+       (github.base_ref == 'staging' || github.base_ref == 'master') &&
+       !(github.head_ref == 'dev' && github.base_ref == 'master'))
     
     services:
       localstack:
