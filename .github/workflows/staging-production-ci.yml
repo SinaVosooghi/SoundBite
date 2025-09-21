@@ -190,7 +190,6 @@ jobs:
           ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:${{ steps.env-info.outputs.tag }}
           ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:${{ github.sha }}
         cache-from: type=gha
-        cache-to: type=gha,mode=max
         platforms: linux/amd64
         
     - name: Upload build artifacts
