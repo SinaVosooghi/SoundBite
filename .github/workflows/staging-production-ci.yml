@@ -171,7 +171,7 @@ jobs:
       if: github.ref == 'refs/heads/staging'
       uses: aws-actions/configure-aws-credentials@v4
       with:
-        role-to-assume: arn:aws:iam::762233763891:role/GitHubActionsRole
+        role-to-assume: arn:aws:iam::762233763891:role/GitHubActions-SoundBite-Prod
         aws-region: ${{ env.AWS_REGION }}
         
     - name: Login to Amazon ECR
