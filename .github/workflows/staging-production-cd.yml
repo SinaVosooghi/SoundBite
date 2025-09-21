@@ -1,8 +1,6 @@
 name: Staging/Production CD
 
 on:
-  push:
-    branches: [ staging, master ]
   workflow_run:
     workflows: ["Staging/Production CI"]
     types: [completed]
