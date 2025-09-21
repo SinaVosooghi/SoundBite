@@ -131,7 +131,7 @@ jobs:
         docker run -d \
           --name test-dev-container \
           --network host \
-          -p 3001:3000 \
+          -p 3000:3000 \
           -e NODE_ENV=development-localstack \
           -e AWS_REGION=us-east-1 \
           -e AWS_ACCESS_KEY_ID=test \
