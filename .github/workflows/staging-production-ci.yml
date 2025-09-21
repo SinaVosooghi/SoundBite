@@ -86,22 +86,31 @@ jobs:
     - name: Build application
       run: yarn build
       
-    # Step 3: Build Docker image
-    - name: Set up Docker Buildx
-      uses: docker/setup-buildx-action@v3
-      
+    # Step 3: Determine environment and tags
     - name: Determine environment and tags
       id: env-info
       run: |
-        if [[ "${{ github.ref }}" == "refs/heads/master" ]]; then
+        # For pull requests, use base_ref (target branch)
+        # For push events, use ref (source branch)
+        if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+          BRANCH="${{ github.base_ref }}"
+        else
+          BRANCH="${{ github.ref }}"
+          BRANCH="${BRANCH#refs/heads/}"
+        fi
+        
+        if [[ "$BRANCH" == "master" ]]; then
           echo "environment=production" >> $GITHUB_OUTPUT
           echo "tag=production" >> $GITHUB_OUTPUT
-        elif [[ "${{ github.ref }}" == "refs/heads/staging" ]]; then
+        elif [[ "$BRANCH" == "staging" ]]; then
           echo "environment=staging" >> $GITHUB_OUTPUT
           echo "tag=staging" >> $GITHUB_OUTPUT
         else
           echo "❌ This workflow should only run on staging or master branches"
-          echo "Current branch: ${{ github.ref }}"
+          echo "Current branch/target: $BRANCH"
+          echo "Event: ${{ github.event_name }}"
+          echo "Ref: ${{ github.ref }}"
+          echo "Base ref: ${{ github.base_ref }}"
           exit 1
         fi
         
@@ -109,7 +118,7 @@ jobs:
     - name: Build and Test Docker container with AWS infra
       run: |
         echo "Building Docker image for ${{ steps.env-info.outputs.tag }} environment..."
-        docker build -f ./Dockerfile -t soundbite-${{ steps.env-info.outputs.tag }}:latest .
+        docker build -f ./Dockerfile.dev -t soundbite-${{ steps.env-info.outputs.tag }}:latest .
         echo "✅ Docker image built successfully"
         
         echo "Testing Docker container with AWS infrastructure..."
@@ -118,7 +127,7 @@ jobs:
         docker run -d \
           --name test-${{ steps.env-info.outputs.tag }}-container \
           -p 3001:3000 \
-          -e NODE_ENV=${{ steps.env-info.outputs.environment }} \
+          -e NODE_ENV=development-localstack \
           -e AWS_REGION=us-east-1 \
           -e AWS_ACCESS_KEY_ID=test \
           -e AWS_SECRET_ACCESS_KEY=test \
@@ -149,21 +158,29 @@ jobs:
         docker stop test-${{ steps.env-info.outputs.tag }}-container || true
         docker rm test-${{ steps.env-info.outputs.tag }}-container || true
         
-    # Step 5: Push image to ECR (only on push, not PR)
+    # Step 5: Build production Docker image (for PRs)
+    - name: Build production Docker image for testing
+      if: github.event_name == 'pull_request'
+      run: |
+        echo "Building production Docker image for PR testing..."
+        docker build -f ./Dockerfile -t soundbite-production-test:latest .
+        echo "✅ Production Docker image built successfully for PR testing"
+        
+    # Step 6: Push image to ECR (only on staging branch pushes)
     - name: Configure AWS credentials
-      if: github.event_name == 'push'
+      if: github.ref == 'refs/heads/staging'
       uses: aws-actions/configure-aws-credentials@v4
       with:
         role-to-assume: arn:aws:iam::762233763891:role/GitHubActionsRole
         aws-region: ${{ env.AWS_REGION }}
         
     - name: Login to Amazon ECR
-      if: github.event_name == 'push'
+      if: github.ref == 'refs/heads/staging'
       id: login-ecr
       uses: aws-actions/amazon-ecr-login@v2
       
     - name: Push Docker image to ECR
-      if: github.event_name == 'push'
+      if: github.ref == 'refs/heads/staging'
       uses: docker/build-push-action@v5
       with:
         context: .
