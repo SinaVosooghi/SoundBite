@@ -1,0 +1,19 @@
+{
+  "ref": "refs/heads/staging",
+  "head_ref": "dev",
+  "repository": {
+    "name": "SoundBite",
+    "full_name": "SinaVosooghi/SoundBite"
+  },
+  "pusher": {
+    "name": "test-user",
+    "email": "test@example.com"
+  },
+  "commits": [
+    {
+      "id": "abc123",
+      "message": "Test commit",
+      "timestamp": "2025-09-19T10:00:00Z"
+    }
+  ]
+}

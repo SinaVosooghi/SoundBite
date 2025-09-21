@@ -118,7 +118,7 @@ jobs:
         docker run -d \
           --name test-${{ steps.env-info.outputs.tag }}-container \
           -p 3001:3000 \
-          -e NODE_ENV=${{ steps.env-info.outputs.environment }} \
+          -e NODE_ENV=development-localstack \
           -e AWS_REGION=us-east-1 \
           -e AWS_ACCESS_KEY_ID=test \
           -e AWS_SECRET_ACCESS_KEY=test \
