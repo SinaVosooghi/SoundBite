@@ -57,22 +57,32 @@ jobs:
         role-to-assume: arn:aws:iam::762233763891:role/GitHubActions-SoundBite-Prod
         aws-region: ${{ env.AWS_REGION }}
         
-    - name: Determine environment
-      id: env-info
-      run: |
-        if [[ "${{ github.event.workflow_run.head_branch }}" == "master" ]]; then
-          echo "environment=production" >> $GITHUB_OUTPUT
-          echo "tag=production" >> $GITHUB_OUTPUT
-          echo "ec2-instance-id=i-0e42eb553386cc529" >> $GITHUB_OUTPUT  # Shared instance for MVP
-        elif [[ "${{ github.event.workflow_run.head_branch }}" == "staging" ]]; then
-          echo "environment=staging" >> $GITHUB_OUTPUT
-          echo "tag=staging" >> $GITHUB_OUTPUT
-          echo "ec2-instance-id=i-0e42eb553386cc529" >> $GITHUB_OUTPUT  # Shared instance for MVP
-        else
-          echo "environment=staging" >> $GITHUB_OUTPUT
-          echo "tag=staging" >> $GITHUB_OUTPUT
-          echo "ec2-instance-id=i-0e42eb553386cc529" >> $GITHUB_OUTPUT  # Shared instance for MVP
-        fi
+       - name: Determine environment
+         id: env-info
+         run: |
+           # Determine environment based on trigger type
+           if [[ "${{ github.event_name }}" == "workflow_run" ]]; then
+             BRANCH="${{ github.event.workflow_run.head_branch }}"
+           else
+             BRANCH="${GITHUB_REF#refs/heads/}"
+           fi
+           
+           if [[ "$BRANCH" == "master" ]]; then
+             echo "environment=production" >> $GITHUB_OUTPUT
+             echo "tag=production" >> $GITHUB_OUTPUT
+             echo "node-env=production" >> $GITHUB_OUTPUT
+             echo "ec2-instance-id=i-0e42eb553386cc529" >> $GITHUB_OUTPUT  # Shared instance for MVP
+           elif [[ "$BRANCH" == "staging" ]]; then
+             echo "environment=staging" >> $GITHUB_OUTPUT
+             echo "tag=staging" >> $GITHUB_OUTPUT
+             echo "node-env=staging" >> $GITHUB_OUTPUT
+             echo "ec2-instance-id=i-0e42eb553386cc529" >> $GITHUB_OUTPUT  # Shared instance for MVP
+           else
+             echo "environment=staging" >> $GITHUB_OUTPUT
+             echo "tag=staging" >> $GITHUB_OUTPUT
+             echo "node-env=staging" >> $GITHUB_OUTPUT
+             echo "ec2-instance-id=i-0e42eb553386cc529" >> $GITHUB_OUTPUT  # Shared instance for MVP
+           fi
         
     - name: Get latest image tag
       id: image-tag
@@ -121,14 +131,14 @@ jobs:
           --name soundbite-$ENVIRONMENT \
           --restart unless-stopped \
           -p $APP_PORT:3000 \
-          -e NODE_ENV=$ENVIRONMENT \
-          -e AWS_REGION=$AWS_REGION \
-          -e AWS_ACCESS_KEY_ID=$AWS_ACCESS_KEY_ID \
-          -e AWS_SECRET_ACCESS_KEY=$AWS_SECRET_ACCESS_KEY \
-           -e TABLE_NAME=SoundBite-development-SoundbitesTable \
-           -e QUEUE_NAME=SoundBite-MultiEnv-SoundbiteQueue \
-           -e S3_BUCKET=soundbite-development-soundbites-762233763891 \
-           -e SQS_QUEUE_URL=https://sqs.us-east-1.amazonaws.com/762233763891/SoundBite-MultiEnv-SoundbiteQueue \
+           -e NODE_ENV=${{ steps.env-info.outputs.node-env }} \
+           -e AWS_REGION=$AWS_REGION \
+           -e AWS_ACCESS_KEY_ID=$AWS_ACCESS_KEY_ID \
+           -e AWS_SECRET_ACCESS_KEY=$AWS_SECRET_ACCESS_KEY \
+           -e TABLE_NAME=SoundBite-${{ steps.env-info.outputs.node-env }}-SoundbitesTable \
+           -e QUEUE_NAME=SoundBite-${{ steps.env-info.outputs.node-env }}-SoundbiteQueue \
+           -e S3_BUCKET=soundbite-${{ steps.env-info.outputs.node-env }}-soundbites-762233763891 \
+           -e SQS_QUEUE_URL=https://sqs.us-east-1.amazonaws.com/762233763891/SoundBite-${{ steps.env-info.outputs.node-env }}-SoundbiteQueue \
           $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
         
         # Wait for health check
