@@ -158,18 +158,29 @@ jobs:
         docker stop test-${{ steps.env-info.outputs.tag }}-container || true
         docker rm test-${{ steps.env-info.outputs.tag }}-container || true
         
-    # Step 5: Push image to ECR (on both push and PR events)
+    # Step 5: Build production Docker image (for PRs)
+    - name: Build production Docker image for testing
+      if: github.event_name == 'pull_request'
+      run: |
+        echo "Building production Docker image for PR testing..."
+        docker build -f ./Dockerfile -t soundbite-production-test:latest .
+        echo "✅ Production Docker image built successfully for PR testing"
+        
+    # Step 6: Push image to ECR (only on staging branch pushes)
     - name: Configure AWS credentials
+      if: github.ref == 'refs/heads/staging'
       uses: aws-actions/configure-aws-credentials@v4
       with:
         role-to-assume: arn:aws:iam::762233763891:role/GitHubActionsRole
         aws-region: ${{ env.AWS_REGION }}
         
     - name: Login to Amazon ECR
+      if: github.ref == 'refs/heads/staging'
       id: login-ecr
       uses: aws-actions/amazon-ecr-login@v2
       
     - name: Push Docker image to ECR
+      if: github.ref == 'refs/heads/staging'
       uses: docker/build-push-action@v5
       with:
         context: .
