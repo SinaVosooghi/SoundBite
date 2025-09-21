@@ -127,7 +127,7 @@ jobs:
           -e AWS_SECRET_ACCESS_KEY=$AWS_SECRET_ACCESS_KEY \
            -e TABLE_NAME=SoundBite-development-SoundbitesTable \
            -e QUEUE_NAME=SoundBite-MultiEnv-SoundbiteQueue \
-           -e S3_BUCKET=soundbite-multienv-soundbites-762233763891 \
+           -e S3_BUCKET=soundbite-development-soundbites-762233763891 \
            -e SQS_QUEUE_URL=https://sqs.us-east-1.amazonaws.com/762233763891/SoundBite-MultiEnv-SoundbiteQueue \
           $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
         
