@@ -1,5 +1,11 @@
 name: Staging/Production CI
 
+# This workflow handles CI for staging and production environments:
+# - Runs tests with LocalStack (AWS services emulation)
+# - Builds and tests Docker containers
+# - Pushes production images to ECR (staging branch only)
+# - Supports both direct pushes and pull requests
+
 on:
   push:
     branches: [ staging, master ]
@@ -16,11 +22,37 @@ concurrency:
   cancel-in-progress: true
 
 env:
+  # Node.js Configuration
   NODE_VERSION: '22'
   YARN_VERSION: '4.9.4'
+  
+  # AWS Configuration
   AWS_REGION: us-east-1
+  AWS_ACCOUNT_ID: 762233763891
   ECR_REGISTRY: 762233763891.dkr.ecr.us-east-1.amazonaws.com
   ECR_REPOSITORY: soundbite-development-api
+  
+  # AWS Service Configuration
+  TABLE_NAME: SoundbitesTable
+  QUEUE_NAME: SoundbiteQueue
+  S3_BUCKET: soundbitesbucket
+  
+  # LocalStack Configuration
+  LOCALSTACK_ENDPOINT: http://localhost:4566
+  LOCALSTACK_SQS_URL: http://sqs.us-east-1.localhost.localstack.cloud:4566/000000000000/SoundbiteQueue
+  
+  # Docker Configuration
+  DOCKER_DEV_FILE: ./Dockerfile.dev
+  DOCKER_PROD_FILE: ./Dockerfile
+  CONTAINER_PORT: 3001
+  HEALTH_CHECK_PORT: 3001
+  
+  # AWS IAM Configuration
+  AWS_ROLE_NAME: GitHubActions-SoundBite-Prod
+  
+  # Test Configuration
+  TEST_TIMEOUT: 30
+  HEALTH_CHECK_TIMEOUT: 30
 
 jobs:
   test-and-push:
@@ -44,7 +76,7 @@ jobs:
           SERVICES: s3,sqs,dynamodb,sts
           DEBUG: 0
         options: >-
-          --health-cmd="curl -s http://localhost:4566/_localstack/health"
+          --health-cmd="curl -s ${{ env.LOCALSTACK_ENDPOINT }}/_localstack/health"
           --health-interval=10s --health-timeout=5m --health-retries=10
     
     steps:
@@ -74,14 +106,14 @@ jobs:
       run: yarn test
       env:
         NODE_ENV: test
-        AWS_REGION: us-east-1
+        AWS_REGION: ${{ env.AWS_REGION }}
         AWS_ACCESS_KEY_ID: test
         AWS_SECRET_ACCESS_KEY: test
-        AWS_ENDPOINT: http://localhost:4566
-        TABLE_NAME: SoundbitesTable
-        QUEUE_NAME: SoundbiteQueue
-        S3_BUCKET: soundbitesbucket
-        SQS_QUEUE_URL: http://sqs.us-east-1.localhost.localstack.cloud:4566/000000000000/SoundbiteQueue
+        AWS_ENDPOINT: ${{ env.LOCALSTACK_ENDPOINT }}
+        TABLE_NAME: ${{ env.TABLE_NAME }}
+        QUEUE_NAME: ${{ env.QUEUE_NAME }}
+        S3_BUCKET: ${{ env.S3_BUCKET }}
+        SQS_QUEUE_URL: ${{ env.LOCALSTACK_SQS_URL }}
         
     - name: Build application
       run: yarn build
@@ -118,7 +150,7 @@ jobs:
     - name: Build and Test Docker container with AWS infra
       run: |
         echo "Building Docker image for ${{ steps.env-info.outputs.tag }} environment..."
-        docker build -f ./Dockerfile.dev -t soundbite-${{ steps.env-info.outputs.tag }}:latest .
+        docker build -f ${{ env.DOCKER_DEV_FILE }} -t soundbite-${{ steps.env-info.outputs.tag }}:latest .
         echo "✅ Docker image built successfully"
         
         echo "Testing Docker container with AWS infrastructure..."
@@ -126,33 +158,33 @@ jobs:
         # Start container
         docker run -d \
           --name test-${{ steps.env-info.outputs.tag }}-container \
-          -p 3001:3000 \
+          -p ${{ env.CONTAINER_PORT }}:3000 \
           -e NODE_ENV=development-localstack \
-          -e AWS_REGION=us-east-1 \
+          -e AWS_REGION=${{ env.AWS_REGION }} \
           -e AWS_ACCESS_KEY_ID=test \
           -e AWS_SECRET_ACCESS_KEY=test \
-          -e AWS_ENDPOINT=http://localhost:4566 \
-          -e TABLE_NAME=SoundbitesTable \
-          -e QUEUE_NAME=SoundbiteQueue \
-          -e S3_BUCKET=soundbitesbucket \
-          -e SQS_QUEUE_URL=http://sqs.us-east-1.localhost.localstack.cloud:4566/000000000000/SoundbiteQueue \
+          -e AWS_ENDPOINT=${{ env.LOCALSTACK_ENDPOINT }} \
+          -e TABLE_NAME=${{ env.TABLE_NAME }} \
+          -e QUEUE_NAME=${{ env.QUEUE_NAME }} \
+          -e S3_BUCKET=${{ env.S3_BUCKET }} \
+          -e SQS_QUEUE_URL=${{ env.LOCALSTACK_SQS_URL }} \
           soundbite-${{ steps.env-info.outputs.tag }}:latest
         
         # Wait for container to start
-        for i in {1..30}; do
-          if curl -s http://localhost:3001/health > /dev/null 2>&1; then
+        for i in {1..${{ env.HEALTH_CHECK_TIMEOUT }}}; do
+          if curl -s http://localhost:${{ env.HEALTH_CHECK_PORT }}/health > /dev/null 2>&1; then
             echo "✅ Docker container started successfully"
             break
           fi
-          echo "Waiting for container... ($i/30)"
+          echo "Waiting for container... ($i/${{ env.HEALTH_CHECK_TIMEOUT }})"
           sleep 2
         done
         
         # Test health endpoint
-        curl -f http://localhost:3001/health
+        curl -f http://localhost:${{ env.HEALTH_CHECK_PORT }}/health
         
         # Test API endpoint
-        curl -f http://localhost:3001/
+        curl -f http://localhost:${{ env.HEALTH_CHECK_PORT }}/
         
         # Clean up
         docker stop test-${{ steps.env-info.outputs.tag }}-container || true
@@ -163,7 +195,7 @@ jobs:
       if: github.event_name == 'pull_request'
       run: |
         echo "Building production Docker image for PR testing..."
-        docker build -f ./Dockerfile -t soundbite-production-test:latest .
+        docker build -f ${{ env.DOCKER_PROD_FILE }} -t soundbite-production-test:latest .
         echo "✅ Production Docker image built successfully for PR testing"
         
     # Step 6: Push image to ECR (only on staging branch pushes)
@@ -171,7 +203,7 @@ jobs:
       if: github.ref == 'refs/heads/staging'
       uses: aws-actions/configure-aws-credentials@v4
       with:
-        role-to-assume: arn:aws:iam::762233763891:role/GitHubActions-SoundBite-Prod
+        role-to-assume: arn:aws:iam::${{ env.AWS_ACCOUNT_ID }}:role/${{ env.AWS_ROLE_NAME }}
         aws-region: ${{ env.AWS_REGION }}
         
     - name: Login to Amazon ECR
@@ -184,7 +216,7 @@ jobs:
       uses: docker/build-push-action@v5
       with:
         context: .
-        file: ./Dockerfile
+        file: ${{ env.DOCKER_PROD_FILE }}
         push: true
         tags: |
           ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:${{ steps.env-info.outputs.tag }}
@@ -192,6 +224,7 @@ jobs:
         cache-from: type=gha
         platforms: linux/amd64
         
+    # Step 7: Upload build artifacts
     - name: Upload build artifacts
       uses: actions/upload-artifact@v4
       with:
