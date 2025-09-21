@@ -139,6 +139,9 @@ jobs:
             \"for i in {1..30}; do if curl -s http://localhost:$EXTERNAL_PORT/health > /dev/null 2>&1; then echo \\\"✅ Deployment successful!\\\"; break; fi; echo \\\"Waiting for health check... (\\\$i/30)\\\"; sleep 2; done\",
             \"echo \\\"🧹 Cleaning up old images...\\\"\",
             \"docker image prune -f\",
+            \"echo \\\"🔧 Updating Nginx configuration...\\\"\",
+            \"sed -i \\\"s|proxy_pass http://localhost:3000/;|proxy_pass http://localhost:3002/;|g\\\" /etc/nginx/conf.d/soundbite.conf\",
+            \"nginx -t && systemctl reload nginx\",
             \"echo \\\"🎉 Deployment completed!\\\"\"
           ]" \
           --region ${{ env.AWS_REGION }} \
