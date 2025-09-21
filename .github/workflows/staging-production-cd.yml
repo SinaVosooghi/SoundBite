@@ -1,7 +1,9 @@
 name: Staging/Production CD
 
 on:
-  push:
+  workflow_run:
+    workflows: ["Staging/Production CI"]
+    types: [completed]
     branches: [ staging, master ]
   workflow_dispatch:
     inputs:
@@ -18,6 +20,10 @@ permissions:
   contents: read
   id-token: write
 
+concurrency:
+  group: environment-${{ github.ref }}
+  cancel-in-progress: false
+
 env:
   AWS_REGION: us-east-1
   ECR_REGISTRY: 762233763891.dkr.ecr.us-east-1.amazonaws.com
@@ -29,7 +35,6 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     if: |
-      github.event_name == 'push' ||
       (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success') ||
       github.event_name == 'workflow_dispatch'
     
@@ -38,52 +43,14 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
 
-    - name: Wait for CI Success
-      if: github.event_name == 'push'
+    - name: Verify CI Success
+      if: github.event_name == 'workflow_run'
       run: |
-        echo "🔍 Waiting for CI to complete before deployment..."
-        
-        # Wait for CI to complete (up to 10 minutes)
-        MAX_ATTEMPTS=20
-        ATTEMPT=0
-        
-        while [[ $ATTEMPT -lt $MAX_ATTEMPTS ]]; do
-          ATTEMPT=$((ATTEMPT + 1))
-          echo "⏳ Attempt $ATTEMPT/$MAX_ATTEMPTS - Checking CI status..."
-          
-          # Get the latest CI run for this branch
-          CI_RUNS=$(gh run list --workflow=staging-production-ci.yml --branch=${{ github.ref_name }} --limit 1 --json conclusion,status,createdAt)
-          CI_CONCLUSION=$(echo "$CI_RUNS" | jq -r '.[0].conclusion // "null"')
-          CI_STATUS=$(echo "$CI_RUNS" | jq -r '.[0].status // "null"')
-          CI_CREATED=$(echo "$CI_RUNS" | jq -r '.[0].createdAt // "null"')
-          
-          echo "CI run status: $CI_STATUS"
-          echo "CI run conclusion: $CI_CONCLUSION"
-          echo "CI run created: $CI_CREATED"
-          
-          if [[ "$CI_STATUS" == "completed" ]]; then
-            if [[ "$CI_CONCLUSION" == "success" ]]; then
-              echo "✅ CI has passed successfully!"
-              break
-            else
-              echo "❌ CI completed but failed. Conclusion: $CI_CONCLUSION"
-              exit 1
-            fi
-          elif [[ "$CI_STATUS" == "in_progress" || "$CI_STATUS" == "queued" ]]; then
-            echo "⏳ CI is still running. Waiting 30 seconds..."
-            sleep 30
-          else
-            echo "❌ Unexpected CI status: $CI_STATUS"
-            exit 1
-          fi
-        done
-        
-        if [[ $ATTEMPT -eq $MAX_ATTEMPTS ]]; then
-          echo "❌ Timeout waiting for CI to complete after $((MAX_ATTEMPTS * 30)) seconds"
-          exit 1
-        fi
-        
-        echo "✅ CI has passed. Proceeding with deployment to ${{ github.ref_name }}"
+        echo "🔍 Verifying CI completed successfully..."
+        echo "CI Workflow: ${{ github.event.workflow_run.name }}"
+        echo "CI Conclusion: ${{ github.event.workflow_run.conclusion }}"
+        echo "CI Status: ${{ github.event.workflow_run.status }}"
+        echo "✅ CI has passed. Proceeding with deployment to ${{ github.event.workflow_run.head_branch }}"
       
     - name: Configure AWS credentials
       uses: aws-actions/configure-aws-credentials@v4
