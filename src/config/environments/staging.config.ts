@@ -9,11 +9,11 @@ export const stagingConfig = {
   },
   services: {
     dynamodb: {
-      tableName: 'SoundBite-MultiEnv-SoundbitesTable',
+      tableName: 'SoundBite-staging-SoundbitesTable',
       endpoint: undefined,
     },
     s3: {
-      bucketName: 'soundbite-multienv-soundbites-762233763891',
+      bucketName: 'soundbite-staging-soundbites-762233763891',
       endpoint: undefined,
     },
     sqs: {
