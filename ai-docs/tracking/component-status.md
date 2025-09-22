@@ -53,11 +53,13 @@
 #### 1. GitHub Actions Workflows
 - **Status**: ✅ Active
 - **Workflows**:
-  - `CI`: ✅ Passing
-  - `Deploy (dev)`: ✅ Passing
-  - `CI/CD Pipeline`: ✅ Passing
-  - `Monitoring`: ✅ Fixed (YAML syntax resolved)
-- **Last Check**: 2025-09-04 15:30 UTC
+  - `dev-ci.yml`: ✅ Passing (Development CI)
+  - `staging-production-ci.yml`: ✅ Passing (Staging/Production CI)
+  - `staging-production-cd.yml`: ✅ Passing (Staging/Production CD)
+  - `monitoring.yml`: ✅ Active (Health monitoring)
+  - `promote-environment.yml`: ✅ Active (Environment promotion)
+  - `rollback-environment.yml`: ✅ Active (Environment rollback)
+- **Last Check**: 2025-09-22 08:50 UTC
 - **Issues**: None
 
 #### 2. OIDC Authentication
@@ -183,6 +185,19 @@
 - **Test Time**: ~1 minute (target: < 2 minutes)
 
 ## Recent Changes
+
+### 2025-09-22
+- ✅ **Project Cleanup**: Removed 20+ redundant scripts and documentation files
+- ✅ **Staging Fix**: Fixed staging resource configuration (DynamoDB table name)
+- ✅ **CI/CD Optimization**: Streamlined workflows to 6 essential ones
+- ✅ **Documentation Cleanup**: Consolidated to single README + structured docs
+- ✅ **Script Restoration**: Restored critical scripts (update-docs.js, validate-docs.js)
+
+### 2025-09-21
+- ✅ Fixed environment variable expansion in CD workflow
+- ✅ Deployed staging with correct resources
+- ✅ Added Docker cleanup automation
+- ✅ Fixed staging resource validation
 
 ### 2025-09-04
 - ✅ Fixed YAML syntax errors in monitoring workflow

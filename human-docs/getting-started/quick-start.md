@@ -33,27 +33,28 @@ cd SoundBite
 yarn install
 ```
 
-### 3. Set Up Environment
+### 3. Start with LocalStack (Recommended)
 ```bash
-cp .env.example .env
-# Edit .env with your AWS credentials
+# Start LocalStack
+localstack start
+
+# Setup and start app
+./scripts/soundbite.sh setup
+./scripts/soundbite.sh dev localstack
 ```
 
-### 4. Deploy Infrastructure
-```bash
-cd cdk
-yarn install
-npx cdk deploy
-```
-
-### 5. Start the Application
-```bash
-yarn start
-```
-
-### 6. Test the API
+### 4. Test the API
 ```bash
 curl http://localhost:3000/health
+```
+
+### 5. Deploy to Staging (Optional)
+```bash
+# Configure AWS credentials first
+aws configure
+
+# Deploy to staging
+./scripts/soundbite.sh deploy staging
 ```
 
 ## What's Next?
