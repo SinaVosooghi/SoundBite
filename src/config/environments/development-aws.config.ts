@@ -13,7 +13,7 @@ export const developmentAWSConfig = {
       endpoint: undefined, // Uses default AWS endpoint
     },
     s3: {
-      bucketName: 'soundbite-multienv-soundbites-762233763891',
+      bucketName: 'soundbite-development-soundbites-762233763891',
       endpoint: undefined, // Uses default AWS endpoint
     },
     sqs: {
