@@ -1,86 +1,57 @@
 # SoundBite 🎵
 
-A simple NestJS audio processing service with AWS integration.
+Minimal NestJS + AWS TTS service with idempotency and CI/CD.
 
 ## Quick Start
 
-### Prerequisites
-- Node.js 22+
-- Docker & Docker Compose
-- AWS CLI (for deployment)
-- Yarn 4
+Prereqs: Node 22, Yarn 4, Docker, AWS CLI
 
-### Local Development (LocalStack)
+Local (LocalStack):
 ```bash
-# Start LocalStack
 localstack start
-
-# Setup and start app
 ./scripts/soundbite.sh setup
 ./scripts/soundbite.sh dev localstack
-
-# Test
 curl http://localhost:3000/health
 ```
 
-### Local Development (AWS)
+Local (AWS):
 ```bash
-# Configure AWS credentials
 aws configure
-
-# Start app with real AWS
 ./scripts/soundbite.sh dev aws
-
-# Test
 curl http://localhost:3001/health
 ```
 
-### Deploy to Staging
+Deploy Staging:
 ```bash
-# Deploy infrastructure and app
 ./scripts/soundbite.sh deploy staging
-
-# Test staging
-curl http://54.204.75.210:3001/health
 ```
 
-## What Works
+## API
 
-✅ **LocalStack Development** - Full local development with LocalStack  
-✅ **AWS Development** - Local app with real AWS services  
-✅ **Staging Deployment** - Deployed to EC2 with CI/CD  
-✅ **CI/CD Pipeline** - Automated testing and deployment  
+- Health: `GET /health`
+- Create Soundbite (TTS): `POST /soundbite`
+  - Headers: `Idempotency-Key: <uuid-v4>`
+- Get Soundbite: `GET /soundbite/:id`
+- Swagger: `GET /api`
 
-## Architecture
+## Tests
 
+```bash
+yarn test        # run all
+yarn test:watch  # watch mode
+yarn test:e2e    # e2e suite
 ```
-Client → NestJS API → SQS → Lambda → AWS Polly → S3
-                                                      ↓
-                                                 DynamoDB (Metadata)
-```
 
-## Available Scripts
+## CI/CD & Envs
 
-- `./scripts/soundbite.sh dev localstack` - Start with LocalStack
-- `./scripts/soundbite.sh dev aws` - Start with real AWS
-- `./scripts/soundbite.sh deploy staging` - Deploy to staging
-- `./scripts/soundbite.sh setup` - Setup LocalStack
+- Workflows: `dev-ci.yml`, `staging-production-ci.yml`, `staging-production-cd.yml` (+ promotion/rollback/monitoring)
+- Environments: Dev LocalStack (3000), Dev AWS (3001), Staging (EC2 via CD). Production planned.
 
-## Endpoints
+## Docs
 
-- **Health**: `GET /health`
-- **Create Soundbite**: `POST /soundbite`
-- **API Docs**: `GET /api`
+- Dev Status: `DEVSTATUS.md`
+- Human docs: `human-docs/`
+- AI docs: `ai-docs/`
+- Legacy: `docs/`
 
-## Configuration
-
-The app uses environment-specific configs in `src/config/environments/`:
-- `development-localstack.config.ts` - LocalStack mode
-- `development-aws.config.ts` - Local with AWS
-- `staging.config.ts` - Staging deployment
-
-## Troubleshooting
-
-- **Port conflicts**: Check if ports 3000/3001 are in use
-- **AWS credentials**: Run `aws sts get-caller-identity`
-- **LocalStack**: Ensure LocalStack is running with `localstack status`
+Notes: dev-aws uses mixed resource naming (S3/SQS MultiEnv vs env-specific DynamoDB). See `DEVSTATUS.md` for options.
