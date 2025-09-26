@@ -18,5 +18,11 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
       
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::762233763891:role/GitHubActions-SoundBite-Prod
+          aws-region: ${{ env.AWS_REGION }}
+      
       - name: Test step
         run: echo "CD workflow is working"
