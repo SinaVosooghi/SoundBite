@@ -173,19 +173,19 @@ jobs:
         
     # Step 5: Push image to ECR (only on staging branch pushes)
     - name: Configure AWS credentials
-      if: github.ref == 'refs/heads/staging'
+      if: github.ref == 'refs/heads/staging' || github.ref == 'refs/heads/master'
       uses: aws-actions/configure-aws-credentials@v4
       with:
         role-to-assume: arn:aws:iam::${{ env.AWS_ACCOUNT_ID }}:role/${{ env.AWS_ROLE_NAME }}
         aws-region: ${{ env.AWS_REGION }}
         
     - name: Login to Amazon ECR
-      if: github.ref == 'refs/heads/staging'
+      if: github.ref == 'refs/heads/staging' || github.ref == 'refs/heads/master'
       id: login-ecr
       uses: aws-actions/amazon-ecr-login@v2
       
     - name: Push Docker image to ECR
-      if: github.ref == 'refs/heads/staging'
+      if: github.ref == 'refs/heads/staging' || github.ref == 'refs/heads/master'
       uses: docker/build-push-action@v5
       with:
         context: .
