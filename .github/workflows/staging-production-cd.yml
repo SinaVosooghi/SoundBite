@@ -88,7 +88,7 @@ jobs:
       run: |
         # Build a fresh image and tag to branch tag
         echo "Building Docker image for ${{ steps.env-info.outputs.tag }}..."
-        docker build -f ${{ env.DOCKER_PROD_FILE:-./Dockerfile }} -t soundbite-${{ steps.env-info.outputs.tag }}:latest .
+        docker build -f ${{ env.DOCKER_PROD_FILE }} -t soundbite-${{ steps.env-info.outputs.tag }}:latest .
         echo "Logging in to ECR..."
         aws ecr get-login-password --region ${{ env.AWS_REGION }} | docker login --username AWS --password-stdin ${{ env.ECR_REGISTRY }}
         echo "Tagging image for ECR..."
