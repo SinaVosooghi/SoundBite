@@ -1,0 +1,86 @@
+# Docker Compose for EC2 Staging/Production Deployment
+# Used by CI/CD pipeline to manage staging and production environments
+version: '3.8'
+
+services:
+  # Staging Environment
+  soundbite-staging:
+    image: 762233763891.dkr.ecr.us-east-1.amazonaws.com/soundbite-development-api:staging
+    container_name: soundbite-staging
+    environment:
+      - NODE_ENV=staging
+      - ENVIRONMENT=staging
+      - AWS_REGION=us-east-1
+      # AWS credentials will be provided by EC2 instance role
+    ports:
+      - "3002:3000"
+    networks:
+      - soundbite-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # Production Environment
+  soundbite-production:
+    image: 762233763891.dkr.ecr.us-east-1.amazonaws.com/soundbite-development-api:staging
+    container_name: soundbite-production
+    environment:
+      - NODE_ENV=production
+      - ENVIRONMENT=production
+      - AWS_REGION=us-east-1
+      # AWS credentials will be provided by EC2 instance role
+    ports:
+      - "3001:3000"
+    networks:
+      - soundbite-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # Nginx Reverse Proxy for EC2
+  nginx:
+    image: nginx:alpine
+    container_name: soundbite-nginx
+    ports:
+      - "8080:80"
+    volumes:
+      - ./nginx/ec2.conf:/etc/nginx/conf.d/default.conf
+    networks:
+      - soundbite-network
+    depends_on:
+      - soundbite-staging
+      - soundbite-production
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "5m"
+        max-file: "2"
+
+networks:
+  soundbite-network:
+    driver: bridge

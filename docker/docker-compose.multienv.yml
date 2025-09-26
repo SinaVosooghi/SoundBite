@@ -1,0 +1,127 @@
+# Multi-Environment Docker Compose for SoundBite
+# This file runs all five environments simultaneously
+version: '3.8'
+
+services:
+  # Development LocalStack Environment
+  soundbite-dev-localstack:
+    image: soundbite:dev
+    container_name: soundbite-dev-localstack
+    environment:
+      - NODE_ENV=development
+      - ENVIRONMENT=dev-localstack
+      - AWS_CONNECTION_MODE=localstack
+      - AWS_ENDPOINT=http://localstack:4566
+      - PORT=3000
+    ports:
+      - "3000:3000"
+    networks:
+      - soundbite-network
+    depends_on:
+      - localstack
+    restart: unless-stopped
+
+  # Development AWS Environment
+  soundbite-dev-aws:
+    image: soundbite:dev
+    container_name: soundbite-dev-aws
+    environment:
+      - NODE_ENV=development
+      - ENVIRONMENT=dev-aws
+      - AWS_CONNECTION_MODE=aws
+      - PORT=3001
+      - AWS_REGION=us-east-1
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - AWS_SESSION_TOKEN=${AWS_SESSION_TOKEN}
+    ports:
+      - "3001:3000"
+    networks:
+      - soundbite-network
+    restart: unless-stopped
+
+  # Development AWS Deployed Environment
+  soundbite-dev-aws-deployed:
+    image: soundbite:dev-aws-deployed
+    container_name: soundbite-dev-aws-deployed
+    environment:
+      - NODE_ENV=development
+      - ENVIRONMENT=dev-aws-deployed
+      - AWS_CONNECTION_MODE=aws
+      - PORT=3002
+    ports:
+      - "3002:3000"
+    networks:
+      - soundbite-network
+    restart: unless-stopped
+
+  # Staging Environment
+  soundbite-staging:
+    image: soundbite:staging
+    container_name: soundbite-staging
+    environment:
+      - NODE_ENV=staging
+      - ENVIRONMENT=staging
+      - PORT=3000
+      - AWS_REGION=us-east-1
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - AWS_SESSION_TOKEN=${AWS_SESSION_TOKEN}
+    ports:
+      - "3003:3000"
+    networks:
+      - soundbite-network
+    restart: unless-stopped
+
+  # Production Environment
+  soundbite-production:
+    image: soundbite:production
+    container_name: soundbite-production
+    environment:
+      - NODE_ENV=production
+      - ENVIRONMENT=production
+      - PORT=3000
+    ports:
+      - "3004:3000"
+    networks:
+      - soundbite-network
+    restart: unless-stopped
+
+  # LocalStack for dev-localstack environment
+  localstack:
+    image: localstack/localstack:3.0
+    container_name: soundbite-localstack
+    environment:
+      - SERVICES=s3,sqs,dynamodb,sts
+      - DEBUG=1
+      - DATA_DIR=/tmp/localstack/data
+    ports:
+      - "4566:4566"
+    networks:
+      - soundbite-network
+    volumes:
+      - localstack-data:/tmp/localstack
+    restart: unless-stopped
+
+  # Nginx Reverse Proxy
+  nginx:
+    image: nginx:alpine
+    container_name: soundbite-nginx
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/soundbite.conf:/etc/nginx/conf.d/default.conf
+    networks:
+      - soundbite-network
+    depends_on:
+      - soundbite-staging
+      - soundbite-production
+    restart: unless-stopped
+
+volumes:
+  localstack-data:
+    driver: local
+
+networks:
+  soundbite-network:
+    driver: bridge

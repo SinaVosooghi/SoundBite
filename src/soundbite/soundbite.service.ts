@@ -16,6 +16,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { AWSConfig } from 'src/types/aws';
 import { SOUNDBITE_CONSTANTS, SoundbiteStatus } from '../constants/soundbite';
 import { ErrorHandler } from '../utils/error-handler';
+import { getEnvironmentConfig } from '../config';
 
 @Injectable()
 export class SoundbiteService {
@@ -146,15 +147,10 @@ export class SoundbiteService {
       // Initialize AWS clients if not already done
       this.initializeAwsClients();
 
-      // Get configuration values
-      const tableName = this.configService.get<string>(
-        'DYNAMODB_TABLE_NAME',
-        'soundbites',
-      );
-      const queueUrl = this.configService.get<string>(
-        'SQS_QUEUE_URL',
-        'https://sqs.us-east-1.amazonaws.com/123456789012/soundbite-queue',
-      );
+      // Get configuration values from EnvironmentLoader
+      const envConfig = getEnvironmentConfig();
+      const tableName = envConfig.services.dynamodb.tableName;
+      const queueUrl = envConfig.services.sqs.queueUrl;
 
       this.logger.log(
         `Creating soundbite for text: "${text.substring(0, 50)}${
@@ -276,11 +272,9 @@ export class SoundbiteService {
       // Initialize AWS clients if not already done
       this.initializeAwsClients();
 
-      // Get configuration values
-      const tableName = this.configService.get<string>(
-        'DYNAMODB_TABLE_NAME',
-        'soundbites',
-      );
+      // Get configuration values from EnvironmentLoader
+      const envConfig = getEnvironmentConfig();
+      const tableName = envConfig.services.dynamodb.tableName;
 
       this.logger.log(
         `Fetching soundbite with ID: ${id} from environment: ${nodeEnv}`,
