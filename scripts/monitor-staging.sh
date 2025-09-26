@@ -10,7 +10,7 @@ set -euo pipefail
 AWS_REGION=${AWS_REGION:-us-east-1}
 REPO=${REPO:-SinaVosooghi/SoundBite}
 CI_WORKFLOW_NAME=${CI_WORKFLOW_NAME:-"Staging/Production CI"}
-CD_WORKFLOW_NAME=${CD_WORKFLOW_NAME:-"Staging/Production CD"}
+CD_WORKFLOW_NAME=${CD_WORKFLOW_NAME:-".github/workflows/staging-production-cd.yml"}
 BRANCH=${BRANCH:-staging}
 POLL_SECONDS=${POLL_SECONDS:-15}
 MAX_MINUTES=${MAX_MINUTES:-45}
