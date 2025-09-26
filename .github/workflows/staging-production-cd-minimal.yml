@@ -5,6 +5,10 @@ on:
     branches: [ staging, master ]
   workflow_dispatch:
 
+permissions:
+  contents: read
+  id-token: write
+
 env:
   AWS_REGION: us-east-1
   ECR_REGISTRY: 762233763891.dkr.ecr.us-east-1.amazonaws.com
