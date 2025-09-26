@@ -1,7 +1,9 @@
 name: Staging/Production CD
 
 on:
-  push:
+  workflow_run:
+    workflows: ["Staging/Production CI"]
+    types: [completed]
     branches: [ staging, master ]
   workflow_dispatch:
     inputs:
@@ -33,7 +35,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     if: |
-      github.event_name == 'push' ||
+      (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success') ||
       github.event_name == 'workflow_dispatch'
     
     steps:
@@ -98,6 +100,11 @@ jobs:
         echo "tag=$IMAGE_TAG" >> $GITHUB_OUTPUT
         echo "Using image tag: $IMAGE_TAG"
         
+    - name: Ensure Docker Compose files on EC2
+      run: |
+        # Ensure Docker Compose files exist on EC2 (should be deployed with repo)
+        echo "Docker Compose files should be available on EC2 at /home/ec2-user/"
+    
     - name: Deploy to EC2
       run: |
         # Set dynamic variables
@@ -137,37 +144,30 @@ jobs:
           echo "✅ Staging resources verified"
         fi
 
-        # Execute deployment commands directly on EC2
+        # Deploy using Docker Compose on EC2
         COMMAND_ID=$(aws ssm send-command \
           --instance-ids ${{ steps.env-info.outputs.ec2-instance-id }} \
           --document-name "AWS-RunShellScript" \
           --parameters "commands=[
-            \"echo \\\"🚀 Starting deployment for $ENVIRONMENT...\\\"\",
+            \"echo \\\"🚀 Starting Docker Compose deployment for $ENVIRONMENT...\\\"\",
+            \"cd /home/ec2-user\",
             \"aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin ${{ env.ECR_REGISTRY }}\",
-            \"echo \\\"📦 Pulling latest image...\\\"\",
-            \"docker pull ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:$IMAGE_TAG\",
-            \"echo \\\"🛑 Stopping existing container...\\\"\",
-            \"docker stop soundbite-$ENVIRONMENT || true\",
-            \"docker rm soundbite-$ENVIRONMENT || true\",
+            \"echo \\\"📦 Pulling latest images...\\\"\",
+            \"docker-compose -f docker-compose.ec2.yml pull\",
+            \"echo \\\"🛑 Stopping existing services...\\\"\",
+            \"docker-compose -f docker-compose.ec2.yml down || true\",
             \"echo \\\"🧹 Cleaning up Docker to free space...\\\"\",
             \"docker system prune -f || true\",
-            \"echo \\\"▶️ Starting new container...\\\"\",
-            \"# Use environment-specific resources as per CDK stack pattern\",
-            \"if [[ \\\"$ENVIRONMENT\\\" == \\\"staging\\\" ]]; then\",
-            \"  echo \\\"Using staging resources\\\"\",
-            \"  docker run -d --name soundbite-$ENVIRONMENT --restart unless-stopped -p $EXTERNAL_PORT:3000 -e NODE_ENV=$NODE_ENV -e ENVIRONMENT=$ENVIRONMENT -e AWS_REGION=us-east-1 -e TABLE_NAME=SoundBite-staging-SoundbitesTable -e QUEUE_NAME=SoundBite-MultiEnv-SoundbiteQueue -e S3_BUCKET=soundbite-staging-soundbites-762233763891 -e SQS_QUEUE_URL=https://sqs.us-east-1.amazonaws.com/762233763891/SoundBite-MultiEnv-SoundbiteQueue ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:$IMAGE_TAG\",
-            \"else\",
-            \"  echo \\\"Using development resources\\\"\",
-            \"  docker run -d --name soundbite-$ENVIRONMENT --restart unless-stopped -p $EXTERNAL_PORT:3000 -e NODE_ENV=$NODE_ENV -e ENVIRONMENT=$ENVIRONMENT -e AWS_REGION=us-east-1 -e TABLE_NAME=SoundBite-development-SoundbitesTable -e QUEUE_NAME=SoundBite-MultiEnv-SoundbiteQueue -e S3_BUCKET=soundbite-development-soundbites-762233763891 -e SQS_QUEUE_URL=https://sqs.us-east-1.amazonaws.com/762233763891/SoundBite-MultiEnv-SoundbiteQueue ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:$IMAGE_TAG\",
-            \"fi\",
-            \"echo \\\"⏳ Waiting for health check...\\\"\",
-            \"for i in {1..30}; do if curl -s http://localhost:$EXTERNAL_PORT/health > /dev/null 2>&1; then echo \\\"✅ Deployment successful!\\\"; break; fi; echo \\\"Waiting for health check... (\\\$i/30)\\\"; sleep 2; done\",
-            \"echo \\\"🧹 Cleaning up old images...\\\"\",
-            \"docker image prune -f\",
-            \"echo \\\"🔧 Updating Nginx configuration...\\\"\",
-            \"sed -i \\\"s|proxy_pass http://localhost:3000/;|proxy_pass http://localhost:3002/;|g\\\" /etc/nginx/conf.d/soundbite.conf\",
-            \"nginx -t && systemctl reload nginx\",
-            \"echo \\\"🎉 Deployment completed!\\\"\"
+            \"echo \\\"🚀 Starting services with Docker Compose...\\\"\",
+            \"docker-compose -f docker-compose.ec2.yml up -d\",
+            \"echo \\\"⏳ Waiting for health checks...\\\"\",
+            \"sleep 30\",
+            \"echo \\\"🔍 Checking service status...\\\"\",
+            \"docker-compose -f docker-compose.ec2.yml ps\",
+            \"echo \\\"✅ Testing endpoints...\\\"\",
+            \"curl -f http://localhost:8080/health && echo \\\"✅ Nginx health OK\\\"\",
+            \"curl -f http://localhost:8080/staging/health && echo \\\"✅ Staging health OK\\\"\",
+            \"echo \\\"🎉 Docker Compose deployment completed!\\\"\"
           ]" \
           --region ${{ env.AWS_REGION }} \
           --query 'Command.CommandId' \
@@ -203,26 +203,21 @@ jobs:
         
         echo "EC2 Public IP: $EC2_IP"
         
-        # Determine port based on environment
-        if [[ "${{ steps.env-info.outputs.environment }}" == "staging" ]]; then
-          APP_PORT=3001
-        else
-          APP_PORT=3000
-        fi
+        # Test Docker Compose endpoints
+        echo "Testing Docker Compose endpoints..."
         
-        # Test health endpoint
-        for i in {1..10}; do
-          if curl -s http://$EC2_IP:$APP_PORT/health > /dev/null 2>&1; then
-            echo "✅ Health check passed!"
-            break
-          fi
-          echo "Waiting for health check... ($i/10)"
-          sleep 10
-        done
+        # Test Nginx ingress health
+        curl -f http://$EC2_IP:8080/health && echo "✅ Nginx ingress OK"
         
-        # Test API endpoint
-        curl -f http://$EC2_IP:$APP_PORT/health
-        echo "✅ API endpoint is responding!"
+        # Test staging health
+        curl -f http://$EC2_IP:8080/staging/health && echo "✅ Staging API OK"
+        
+        # Test staging TTS API
+        curl -sS -X POST http://$EC2_IP:8080/staging/soundbite \
+          -H "Content-Type: application/json" \
+          -H "Idempotency-Key: 550e8400-e29b-41d4-a716-446655440099" \
+          -d '{"text":"CD deployment test","voiceId":"Joanna"}' \
+          && echo "✅ Staging TTS API OK"
         
     - name: Notify deployment status
       if: always()
