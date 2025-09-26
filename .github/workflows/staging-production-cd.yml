@@ -91,14 +91,17 @@ jobs:
     - name: Get latest image tag
       id: image-tag
       run: |
-        # Get the latest image tag from ECR
-        IMAGE_TAG=$(aws ecr describe-images \
-          --repository-name ${{ env.ECR_REPOSITORY }} \
-          --image-ids imageTag=${{ steps.env-info.outputs.tag }} \
-          --query 'imageDetails[0].imageTags[0]' \
-          --output text)
-        echo "tag=$IMAGE_TAG" >> $GITHUB_OUTPUT
-        echo "Using image tag: $IMAGE_TAG"
+        # Build a fresh image and tag to branch tag
+        echo "Building Docker image for ${{ steps.env-info.outputs.tag }}..."
+        docker build -f ${{ env.DOCKER_PROD_FILE:-./Dockerfile }} -t soundbite-${{ steps.env-info.outputs.tag }}:latest .
+        echo "Logging in to ECR..."
+        aws ecr get-login-password --region ${{ env.AWS_REGION }} | docker login --username AWS --password-stdin ${{ env.ECR_REGISTRY }}
+        echo "Tagging image for ECR..."
+        docker tag soundbite-${{ steps.env-info.outputs.tag }}:latest ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:${{ steps.env-info.outputs.tag }}
+        echo "Pushing image to ECR..."
+        docker push ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:${{ steps.env-info.outputs.tag }}
+        echo "tag=${{ steps.env-info.outputs.tag }}" >> $GITHUB_OUTPUT
+        echo "Using image tag: ${{ steps.env-info.outputs.tag }}"
         
     - name: Ensure Docker Compose files on EC2
       run: |
