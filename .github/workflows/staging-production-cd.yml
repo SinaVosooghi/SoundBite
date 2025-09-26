@@ -33,9 +33,7 @@ jobs:
     name: Deploy to Environment
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    if: |
-      github.event_name == 'push' ||
-      github.event_name == 'workflow_dispatch'
+    if: true
     
     steps:
     # Step 6: Pull image from ECR to EC2 and restart server
