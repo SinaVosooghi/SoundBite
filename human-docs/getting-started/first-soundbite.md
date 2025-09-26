@@ -33,77 +33,32 @@ curl http://localhost:3000/health
 }
 ```
 
-## Step 3: Upload an Audio File
+## Step 3: Create a SoundBite (TTS)
 
-### Using curl
+### Using curl (LocalStack: port 3000, Dev AWS: port 3001)
 ```bash
-# Upload an audio file
-curl -X POST \
-  -F "file=@/path/to/your/audio.mp3" \
-  -F "idempotencyKey=my-first-soundbite-$(date +%s)" \
-  http://localhost:3000/api/upload
-```
-
-### Using a REST client (Postman, Insomnia, etc.)
-```
-POST http://localhost:3000/api/upload
-Content-Type: multipart/form-data
-
-file: [Select your audio file]
-idempotencyKey: my-first-soundbite-1234567890
-```
-
-### Expected Response
-```json
-{
-  "success": true,
-  "message": "Audio file uploaded successfully",
-  "data": {
-    "fileId": "soundbite-abc123def456",
-    "originalName": "audio.mp3",
-    "size": 1024000,
-    "mimeType": "audio/mpeg",
-    "uploadedAt": "2025-09-04T15:30:00.000Z",
-    "status": "uploaded"
-  }
-}
-```
-
-## Step 4: Process the Audio
-
-### Using curl
-```bash
-# Process the uploaded file
 curl -X POST \
   -H "Content-Type: application/json" \
+  -H "Idempotency-Key: 550e8400-e29b-41d4-a716-446655440000" \
   -d '{
-    "fileId": "soundbite-abc123def456",
-    "idempotencyKey": "my-first-soundbite-process-$(date +%s)"
+    "text": "Hello from SoundBite!",
+    "voiceId": "Joanna"
   }' \
-  http://localhost:3000/api/process
+  http://localhost:3000/soundbite
 ```
 
-### Expected Response
-```json
-{
-  "success": true,
-  "message": "Audio processing started",
-  "data": {
-    "fileId": "soundbite-abc123def456",
-    "processId": "process-xyz789",
-    "status": "processing",
-    "startedAt": "2025-09-04T15:30:30.000Z",
-    "estimatedDuration": "00:02:30"
-  }
-}
+## Step 4: Check SoundBite Status
+
+### Using curl
+```bash
+curl http://localhost:3000/soundbite/<soundbiteId>
 ```
 
 ## Step 5: Check Processing Status
 
 ### Using curl
 ```bash
-# Check the processing status
-curl http://localhost:3000/api/status/soundbite-abc123def456
+curl http://localhost:3000/soundbite/soundbite-abc123def456
 ```
 
 ### Expected Response
@@ -331,12 +286,11 @@ file your-file.mp3
 
 #### 3. Processing Stuck
 ```bash
-# Check processing status
-curl http://localhost:3000/api/status/your-file-id
-
-# If stuck, check server logs
-yarn logs
+# Check status
+curl http://localhost:3000/soundbite/your-soundbite-id
 ```
+
+> Planned: file upload/process/status/download endpoints will be added in a future milestone and are documented in the API reference as Planned.
 
 ### Getting Help
 

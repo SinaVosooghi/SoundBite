@@ -8,20 +8,22 @@ SoundBite uses a **unified infrastructure approach** where staging and productio
 
 ### Development Environment
 - **CDK Prefix**: `dev`
-- **Port**: 3001
-- **Domain**: `dev.soundbite.local`
+- **Ports**:
+  - LocalStack mode: 3000 (local app + LocalStack)
+  - AWS mode: 3001 (local app + real AWS)
 - **Log Level**: `debug`
 - **Features**: `['basic', 'debug', 'local']`
-- **Dockerfile**: `Dockerfile.dev-aws-deployed`
+- **Dockerfile**: `Dockerfile.dev`
 - **Infrastructure**: `SoundBite-development-*`
 
 ### Staging Environment
 - **CDK Prefix**: `staging`
-- **Port**: 3002
-- **Domain**: `staging.soundbite.local`
+- **Ports**:
+  - App container: 3000
+  - EC2 mapping: 3001/3002 as configured by CD workflow
 - **Log Level**: `info`
 - **Features**: `['basic', 'monitoring', 'testing']`
-- **Dockerfile**: `Dockerfile.staging`
+- **Dockerfile**: `Dockerfile` (shared with production)
 - **Infrastructure**: `SoundBite-staging-*`
 
 ### Production Environment
