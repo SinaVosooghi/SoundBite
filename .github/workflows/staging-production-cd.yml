@@ -26,6 +26,7 @@ env:
   AWS_REGION: us-east-1
   ECR_REGISTRY: 762233763891.dkr.ecr.us-east-1.amazonaws.com
   ECR_REPOSITORY: soundbite-development-api
+  DOCKER_PROD_FILE: ./Dockerfile
 
 jobs:
   deploy:
