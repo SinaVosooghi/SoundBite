@@ -67,7 +67,7 @@ export class ComputeStack extends cdk.Stack {
       functionName: `${props.projectName}-${props.environment}-processor`,
       runtime: lambda.Runtime.NODEJS_18_X,
       handler: 'index.handler',
-      code: lambda.Code.fromAsset('../lambda/processor'),
+      code: lambda.Code.fromAsset('../cdk/dist/lambda-processor'),
       role: this.lambdaRole,
       timeout: cdk.Duration.seconds(120), // Must be less than SQS visibility timeout
       memorySize: 512,
