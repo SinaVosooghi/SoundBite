@@ -74,7 +74,8 @@ export class ComputeStack extends cdk.Stack {
       environment: {
         BUCKET_NAME: props.storageBucket.bucketName,
         TABLE_NAME: props.databaseTable.tableName,
-        NODE_ENV: props.environment,
+        NODE_ENV: props.environment === 'development' ? 'development-localstack' : props.environment,
+        AWS_REGION: this.region,
       },
       logRetention: logs.RetentionDays.ONE_WEEK,
     });

@@ -12,17 +12,46 @@ import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 
 import { LambdaLogger } from './logger';
 
-const localOptions = {
-  endpoint: 'http://localhost:4566',
-  region: process.env.AWS_REGION ?? 'us-east-1',
-  credentials: { accessKeyId: 'test', secretAccessKey: 'test' },
-  forcePathStyle: true,
-};
+// Determine runtime environment
+// Treat ONLY "development-localstack" as local. Staging/production should use AWS defaults.
+const nodeEnv = process.env.NODE_ENV ?? 'production';
+const isLocal = nodeEnv === 'development-localstack';
 
-const isLocal = process.env.NODE_ENV !== 'production';
-const polly = isLocal ? null : new PollyClient(localOptions);
-const s3 = new S3Client(localOptions);
-const dynamo = new DynamoDBClient(localOptions);
+// Client factories
+function createS3Client(): S3Client {
+  if (isLocal) {
+    return new S3Client({
+      endpoint: 'http://localhost:4566',
+      region: process.env.AWS_REGION ?? 'us-east-1',
+      credentials: { accessKeyId: 'test', secretAccessKey: 'test' },
+      forcePathStyle: true,
+    });
+  }
+  return new S3Client({ region: process.env.AWS_REGION ?? 'us-east-1' });
+}
+
+function createDynamoClient(): DynamoDBClient {
+  if (isLocal) {
+    return new DynamoDBClient({
+      endpoint: 'http://localhost:4566',
+      region: process.env.AWS_REGION ?? 'us-east-1',
+      credentials: { accessKeyId: 'test', secretAccessKey: 'test' },
+      forcePathStyle: true as unknown as undefined,
+    });
+  }
+  return new DynamoDBClient({ region: process.env.AWS_REGION ?? 'us-east-1' });
+}
+
+function createPollyClient(): PollyClient | null {
+  if (isLocal) {
+    return null; // use mock in local mode
+  }
+  return new PollyClient({ region: process.env.AWS_REGION ?? 'us-east-1' });
+}
+
+const polly = createPollyClient();
+const s3 = createS3Client();
+const dynamo = createDynamoClient();
 
 const BUCKET_NAME = process.env.BUCKET_NAME ?? 'default-bucket';
 const TABLE_NAME = process.env.TABLE_NAME ?? 'default-table';
