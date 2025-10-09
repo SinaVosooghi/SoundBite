@@ -101,14 +101,19 @@ jobs:
         aws ec2 wait instance-running --instance-ids ${{ steps.deployment-outputs.outputs.api-instance-id }}
         
         # Get public IP
-        PUBLIC_IP=$(aws ec2.describe-instances \
+        PUBLIC_IP=$(aws ec2 describe-instances \
           --instance-ids ${{ steps.deployment-outputs.outputs.api-instance-id }} \
           --query 'Reservations[0].Instances[0].PublicIpAddress' \
           --output text)
         
-        # Test health endpoint
+        # Test env-aware health endpoint
         sleep 30  # Wait for application to start
-        curl -f http://$PUBLIC_IP/health || {
+        if [ "${{ github.event.inputs.environment }}" = "production" ]; then
+          HEALTH_PATH="/prod/health"
+        else
+          HEALTH_PATH="/staging/health"
+        fi
+        curl -f http://$PUBLIC_IP$HEALTH_PATH || {
           echo "❌ Health check failed after rollback"
           exit 1
         }
@@ -117,7 +122,7 @@ jobs:
         echo "Environment: ${{ github.event.inputs.environment }}"
         echo "Instance ID: ${{ steps.deployment-outputs.outputs.api-instance-id }}"
         echo "Public IP: $PUBLIC_IP"
-        echo "Health Check: http://$PUBLIC_IP/health"
+        echo "Health Check: http://$PUBLIC_IP$HEALTH_PATH"
 
   notify-rollback:
     name: Notify Rollback

@@ -2,8 +2,8 @@ name: Monitoring and Health Checks
 
 on:
   schedule:
-    # Run health checks once daily at 6 AM UTC
-    - cron: '0 6 * * *'
+    # Run health checks once weekly (Mon 6 AM UTC)
+    - cron: '0 6 * * 1'
   workflow_dispatch:
     inputs:
       environment:

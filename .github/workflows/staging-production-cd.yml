@@ -57,6 +57,23 @@ jobs:
       with:
         default-ec2-instance-id: ${{ steps.cfg.outputs.default-ec2-instance-id }}
         
+    - name: Resolve target EC2 instance by environment
+      id: target-ec2
+      run: |
+        set -euo pipefail
+        ENV="${{ steps.env-info.outputs.environment }}"
+        STACK_NAME="SoundBite-$ENV-API"
+        echo "Resolving EC2 instance for stack: $STACK_NAME"
+        INSTANCE_ID=$(aws cloudformation describe-stacks \
+          --stack-name "$STACK_NAME" \
+          --query "Stacks[0].Outputs[?OutputKey=='ApiInstanceId'].OutputValue" \
+          --output text 2>/dev/null || true)
+        if [ -z "$INSTANCE_ID" ] || [ "$INSTANCE_ID" = "None" ] || [ "$INSTANCE_ID" = "N/A" ]; then
+          INSTANCE_ID="${{ steps.env-info.outputs.ec2-instance-id }}"
+          echo "Falling back to default instance id: $INSTANCE_ID"
+        fi
+        echo "instance-id=$INSTANCE_ID" >> $GITHUB_OUTPUT
+        
     - name: Build and push Docker image
       id: image-tag
       uses: ./.github/actions/docker-build-push
@@ -77,7 +94,7 @@ jobs:
       id: deploy
       uses: ./.github/actions/deploy-ssm-compose
       with:
-        instance-id: ${{ steps.env-info.outputs.ec2-instance-id }}
+        instance-id: ${{ steps.target-ec2.outputs.instance-id }}
         environment: ${{ steps.env-info.outputs.environment }}
         ecr-registry: ${{ steps.cfg.outputs.ecr-registry }}
         ecr-repository: ${{ steps.cfg.outputs.ecr-repository }}
@@ -90,7 +107,7 @@ jobs:
     - name: "Diagnostics (SSM): docker-compose status and logs"
       env:
         ENV: ${{ steps.env-info.outputs.environment }}
-        IID: ${{ steps.env-info.outputs.ec2-instance-id }}
+        IID: ${{ steps.target-ec2.outputs.instance-id }}
         REGION: ${{ steps.cfg.outputs.aws-region }}
       run: |
         set -uo pipefail
@@ -133,14 +150,13 @@ jobs:
         done
         aws ssm get-command-invocation --command-id "$COMMAND_ID" --instance-id "$IID" --region "$REGION" || true
         
-    - name: Verify deployment endpoints
+    - name: Verify deployment endpoints (env-aware)
       uses: ./.github/actions/verify-endpoints
       with:
-        instance-id: ${{ steps.env-info.outputs.ec2-instance-id }}
+        instance-id: ${{ steps.target-ec2.outputs.instance-id }}
         aws-region: ${{ steps.cfg.outputs.aws-region }}
         check-paths: |
-          ${{ steps.cfg.outputs.health-path-common }}
-          ${{ steps.cfg.outputs.health-path-staging }}
+          ${{ steps.env-info.outputs.environment == 'production' && steps.cfg.outputs.health-path-prod || steps.cfg.outputs.health-path-staging }}
         
     - name: Notify deployment status
       if: always()

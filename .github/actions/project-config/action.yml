@@ -70,6 +70,10 @@ inputs:
     description: 'Staging health endpoint path'
     required: false
     default: '/staging/health'
+  health-path-prod:
+    description: 'Production health endpoint path'
+    required: false
+    default: '/prod/health'
 
 outputs:
   node-version:
@@ -106,6 +110,8 @@ outputs:
     value: ${{ steps.out.outputs.health-path-common }}
   health-path-staging:
     value: ${{ steps.out.outputs.health-path-staging }}
+  health-path-prod:
+    value: ${{ steps.out.outputs.health-path-prod }}
 
 runs:
   using: 'composite'
@@ -130,4 +136,5 @@ runs:
         echo "dockerfile-prod=${{ inputs.dockerfile-prod }}" >> $GITHUB_OUTPUT
         echo "health-path-common=${{ inputs.health-path-common }}" >> $GITHUB_OUTPUT
         echo "health-path-staging=${{ inputs.health-path-staging }}" >> $GITHUB_OUTPUT
+        echo "health-path-prod=${{ inputs.health-path-prod }}" >> $GITHUB_OUTPUT
 
