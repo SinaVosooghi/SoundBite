@@ -1,0 +1,64 @@
+name: 'Deploy via SSM and Docker Compose'
+description: 'Deploys to EC2 via SSM running docker-compose steps'
+
+inputs:
+  instance-id:
+    description: 'EC2 instance ID to target'
+    required: true
+  environment:
+    description: 'staging or production'
+    required: true
+  ecr-registry:
+    description: 'ECR registry url'
+    required: true
+  ecr-repository:
+    description: 'ECR repository name'
+    required: true
+  image-tag:
+    description: 'Image tag to deploy'
+    required: true
+  aws-region:
+    description: 'AWS region'
+    required: false
+    default: 'us-east-1'
+
+runs:
+  using: 'composite'
+  steps:
+    - id: deploy
+      shell: bash
+      run: |
+        set -euo pipefail
+        ENVIRONMENT='${{ inputs.environment }}'
+        IMAGE_TAG='${{ inputs.image-tag }}'
+        COMMAND_ID=$(aws ssm send-command \
+          --instance-ids "${{ inputs.instance-id }}" \
+          --document-name "AWS-RunShellScript" \
+          --parameters "commands=[
+            \"echo \\\"🚀 Starting Docker Compose deployment for $ENVIRONMENT...\\\"\",
+            \"cd /home/ec2-user\",
+            \"aws ecr get-login-password --region ${{ inputs.aws-region }} | docker login --username AWS --password-stdin ${{ inputs.ecr-registry }}\",
+            \"echo \\\"✍️  Writing .env for compose with resolved tags...\\\"\",
+            \"echo ECR_REGISTRY=${{ inputs.ecr-registry }} > .env\",
+            \"echo ECR_REPOSITORY=${{ inputs.ecr-repository }} >> .env\",
+            \"if [[ \\\"$ENVIRONMENT\\\" == \\\"staging\\\" ]]; then echo STAGING_TAG=$IMAGE_TAG >> .env; else echo PRODUCTION_TAG=$IMAGE_TAG >> .env; fi\",
+            \"echo \\\"📦 Pulling latest image for target service...\\\"\",
+            \"if [[ \\\"$ENVIRONMENT\\\" == \\\"staging\\\" ]]; then docker-compose -f docker-compose.ec2.yml pull soundbite-staging; else docker-compose -f docker-compose.ec2.yml pull soundbite-production; fi\",
+            \"echo \\\"🛑 Stopping existing services...\\\"\",
+            \"if [[ \\\"$ENVIRONMENT\\\" == \\\"staging\\\" ]]; then docker-compose -f docker-compose.ec2.yml stop soundbite-staging || true; else docker-compose -f docker-compose.ec2.yml stop soundbite-production || true; fi\",
+            \"echo \\\"🧹 Cleaning up Docker to free space...\\\"\",
+            \"docker system prune -f || true\",
+            \"echo \\\"🚀 Starting target service with Docker Compose...\\\"\",
+            \"if [[ \\\"$ENVIRONMENT\\\" == \\\"staging\\\" ]]; then docker-compose -f docker-compose.ec2.yml up -d soundbite-staging nginx; else docker-compose -f docker-compose.ec2.yml up -d soundbite-production nginx; fi\",
+            \"echo \\\"⏳ Waiting for health checks...\\\"\",
+            \"sleep 30\",
+            \"echo \\\"🔍 Checking service status...\\\"\",
+            \"docker-compose -f docker-compose.ec2.yml ps | cat\",
+            \"echo \\\"🎉 Docker Compose deployment completed!\\\"\"
+          ]" \
+          --region "${{ inputs.aws-region }}" \
+          --query 'Command.CommandId' \
+          --output text)
+
+        echo "command-id=$COMMAND_ID" >> $GITHUB_OUTPUT
+

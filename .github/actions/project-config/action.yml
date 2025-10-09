@@ -1,0 +1,133 @@
+name: 'Project Config'
+description: 'Exports shared project configuration as outputs for reuse in workflows'
+
+inputs:
+  node-version:
+    description: 'Default Node.js version'
+    required: false
+    default: '22'
+  yarn-version:
+    description: 'Default Yarn version'
+    required: false
+    default: '4.9.4'
+  aws-region:
+    description: 'AWS region'
+    required: false
+    default: 'us-east-1'
+  ecr-registry:
+    description: 'ECR registry URL'
+    required: false
+    default: '762233763891.dkr.ecr.us-east-1.amazonaws.com'
+  ecr-repository:
+    description: 'ECR repository name'
+    required: false
+    default: 'soundbite-development-api'
+  table-name:
+    description: 'DynamoDB table name'
+    required: false
+    default: 'SoundbitesTable'
+  queue-name:
+    description: 'SQS queue name'
+    required: false
+    default: 'SoundbiteQueue'
+  s3-bucket:
+    description: 'S3 bucket name'
+    required: false
+    default: 'soundbitesbucket'
+  aws-endpoint:
+    description: 'AWS endpoint (LocalStack in CI)'
+    required: false
+    default: 'http://localhost:4566'
+  aws-access-key-id:
+    description: 'AWS access key id for CI/local'
+    required: false
+    default: 'test'
+  aws-secret-access-key:
+    description: 'AWS secret access key for CI/local'
+    required: false
+    default: 'test'
+  role-to-assume:
+    description: 'OIDC role to assume for deployments'
+    required: false
+    default: 'arn:aws:iam::762233763891:role/GitHubActions-SoundBite-Prod'
+  default-ec2-instance-id:
+    description: 'Default EC2 instance id for deployments'
+    required: false
+    default: 'i-0e42eb553386cc529'
+  dockerfile-dev:
+    description: 'Path to development Dockerfile'
+    required: false
+    default: './Dockerfile.dev'
+  dockerfile-prod:
+    description: 'Path to production Dockerfile'
+    required: false
+    default: './Dockerfile'
+  health-path-common:
+    description: 'Common health endpoint path'
+    required: false
+    default: '/health'
+  health-path-staging:
+    description: 'Staging health endpoint path'
+    required: false
+    default: '/staging/health'
+
+outputs:
+  node-version:
+    value: ${{ steps.out.outputs.node-version }}
+  yarn-version:
+    value: ${{ steps.out.outputs.yarn-version }}
+  aws-region:
+    value: ${{ steps.out.outputs.aws-region }}
+  ecr-registry:
+    value: ${{ steps.out.outputs.ecr-registry }}
+  ecr-repository:
+    value: ${{ steps.out.outputs.ecr-repository }}
+  table-name:
+    value: ${{ steps.out.outputs.table-name }}
+  queue-name:
+    value: ${{ steps.out.outputs.queue-name }}
+  s3-bucket:
+    value: ${{ steps.out.outputs.s3-bucket }}
+  aws-endpoint:
+    value: ${{ steps.out.outputs.aws-endpoint }}
+  aws-access-key-id:
+    value: ${{ steps.out.outputs.aws-access-key-id }}
+  aws-secret-access-key:
+    value: ${{ steps.out.outputs.aws-secret-access-key }}
+  role-to-assume:
+    value: ${{ steps.out.outputs.role-to-assume }}
+  default-ec2-instance-id:
+    value: ${{ steps.out.outputs.default-ec2-instance-id }}
+  dockerfile-dev:
+    value: ${{ steps.out.outputs.dockerfile-dev }}
+  dockerfile-prod:
+    value: ${{ steps.out.outputs.dockerfile-prod }}
+  health-path-common:
+    value: ${{ steps.out.outputs.health-path-common }}
+  health-path-staging:
+    value: ${{ steps.out.outputs.health-path-staging }}
+
+runs:
+  using: 'composite'
+  steps:
+    - id: out
+      shell: bash
+      run: |
+        echo "node-version=${{ inputs.node-version }}" >> $GITHUB_OUTPUT
+        echo "yarn-version=${{ inputs.yarn-version }}" >> $GITHUB_OUTPUT
+        echo "aws-region=${{ inputs.aws-region }}" >> $GITHUB_OUTPUT
+        echo "ecr-registry=${{ inputs.ecr-registry }}" >> $GITHUB_OUTPUT
+        echo "ecr-repository=${{ inputs.ecr-repository }}" >> $GITHUB_OUTPUT
+        echo "table-name=${{ inputs.table-name }}" >> $GITHUB_OUTPUT
+        echo "queue-name=${{ inputs.queue-name }}" >> $GITHUB_OUTPUT
+        echo "s3-bucket=${{ inputs.s3-bucket }}" >> $GITHUB_OUTPUT
+        echo "aws-endpoint=${{ inputs.aws-endpoint }}" >> $GITHUB_OUTPUT
+        echo "aws-access-key-id=${{ inputs.aws-access-key-id }}" >> $GITHUB_OUTPUT
+        echo "aws-secret-access-key=${{ inputs.aws-secret-access-key }}" >> $GITHUB_OUTPUT
+        echo "role-to-assume=${{ inputs.role-to-assume }}" >> $GITHUB_OUTPUT
+        echo "default-ec2-instance-id=${{ inputs.default-ec2-instance-id }}" >> $GITHUB_OUTPUT
+        echo "dockerfile-dev=${{ inputs.dockerfile-dev }}" >> $GITHUB_OUTPUT
+        echo "dockerfile-prod=${{ inputs.dockerfile-prod }}" >> $GITHUB_OUTPUT
+        echo "health-path-common=${{ inputs.health-path-common }}" >> $GITHUB_OUTPUT
+        echo "health-path-staging=${{ inputs.health-path-staging }}" >> $GITHUB_OUTPUT
+
