@@ -88,11 +88,12 @@ jobs:
         # ssh -o StrictHostKeyChecking=no ubuntu@$EC2_IP 'bash -s' < deploy.sh
     
     - name: Diagnostics (SSM): docker-compose status and logs
+      env:
+        ENV: ${{ steps.env-info.outputs.environment }}
+        IID: ${{ steps.env-info.outputs.ec2-instance-id }}
+        REGION: ${{ steps.cfg.outputs.aws-region }}
       run: |
         set -euo pipefail
-        ENV="${{ steps.env-info.outputs.environment }}"
-        IID="${{ steps.env-info.outputs.ec2-instance-id }}"
-        REGION="${{ steps.cfg.outputs.aws-region }}"
         echo "Running diagnostics on $IID in $REGION for $ENV..."
         COMMAND_ID=$(aws ssm send-command \
           --instance-ids "$IID" \
