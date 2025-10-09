@@ -67,7 +67,7 @@ jobs:
         
         # Wait for server to start
         for i in {1..30}; do
-          if curl -s http://localhost:3000/health > /dev/null 2>&1; then
+          if curl -s http://localhost:3000${{ steps.cfg.outputs.health-path-common }} > /dev/null 2>&1; then
             echo "✅ Dev server started successfully"
             break
           fi
@@ -76,7 +76,7 @@ jobs:
         done
         
         # Test health endpoint
-        curl -f http://localhost:3000/health
+        curl -f http://localhost:3000${{ steps.cfg.outputs.health-path-common }}
         
         # Clean up
         kill $DEV_PID 2>/dev/null || true
@@ -108,7 +108,7 @@ jobs:
           -e AWS_REGION=${{ steps.cfg.outputs.aws-region }} \
           -e AWS_ACCESS_KEY_ID=${{ steps.cfg.outputs.aws-access-key-id }} \
           -e AWS_SECRET_ACCESS_KEY=${{ steps.cfg.outputs.aws-secret-access-key }} \
-          -e AWS_ENDPOINT=http://localhost:4566 \
+          -e AWS_ENDPOINT=${{ steps.cfg.outputs.aws-endpoint }} \
           -e TABLE_NAME=${{ steps.cfg.outputs.table-name }} \
           -e QUEUE_NAME=${{ steps.cfg.outputs.queue-name }} \
           -e S3_BUCKET=${{ steps.cfg.outputs.s3-bucket }} \
