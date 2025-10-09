@@ -31,12 +31,16 @@ jobs:
           --health-interval=10s --health-timeout=5m --health-retries=10
     
     steps:
-    # Step 0: Load shared project config
+    # Step 0: Checkout repository (required for local actions)
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    # Step 1: Load shared project config
     - name: Load Project Config
       id: cfg
       uses: ./.github/actions/project-config
 
-    # Step 1: Setup Node.js environment and run tests
+    # Step 2: Setup Node.js environment and run tests
     - name: Setup Node.js Environment
       uses: ./.github/actions/setup-node-environment
       with:
