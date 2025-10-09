@@ -5,7 +5,11 @@ import {
   VoiceId,
   type SynthesizeSpeechCommandOutput,
 } from '@aws-sdk/client-polly';
-import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
+import {
+  S3Client,
+  PutObjectCommand,
+  GetObjectCommand,
+} from '@aws-sdk/client-s3';
 import type { PutItemInput } from '@aws-sdk/client-dynamodb';
 import { DynamoDBClient, PutItemCommand } from '@aws-sdk/client-dynamodb';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
@@ -36,7 +40,6 @@ function createDynamoClient(): DynamoDBClient {
       endpoint: 'http://localhost:4566',
       region: process.env.AWS_REGION ?? 'us-east-1',
       credentials: { accessKeyId: 'test', secretAccessKey: 'test' },
-      forcePathStyle: true as unknown as undefined,
     });
   }
   return new DynamoDBClient({ region: process.env.AWS_REGION ?? 'us-east-1' });
@@ -127,28 +130,31 @@ export const handler: SQSHandler = async (event) => {
         }),
       );
 
-      // 3. Generate pre-signed URL
+      // 3. Generate pre-signed GET URL for the uploaded object
       const url = await getSignedUrl(
         s3,
-        new PutObjectCommand({
+        new GetObjectCommand({
           Bucket: BUCKET_NAME,
           Key: s3Key,
         }),
         { expiresIn: 60 * 60 * 24 },
       ); // 24h
 
-      // 4. Write metadata to DynamoDB with TTL
+      // 4. Upsert metadata to DynamoDB with TTL using same key schema as API (pk/sk)
       const now = new Date().toISOString();
       const ttl = Math.floor(Date.now() / 1000) + 30 * 24 * 60 * 60; // 30 days from now
 
       const item: PutItemInput['Item'] = {
-        id: { S: id },
+        pk: { S: `${nodeEnv}:${id}` },
+        sk: { S: `SOUNDBITE#${id}` },
         text: { S: text },
+        voiceId: { S: voiceId ?? 'Joanna' },
         s3Key: { S: s3Key },
         url: { S: url },
         status: { S: 'ready' },
         createdAt: { S: now },
         updatedAt: { S: now },
+        environment: { S: nodeEnv },
         ttl: { N: ttl.toString() }, // TTL for automatic cleanup
       };
 
