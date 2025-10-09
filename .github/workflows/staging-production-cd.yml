@@ -22,8 +22,6 @@ concurrency:
   group: environment-${{ github.ref }}
   cancel-in-progress: false
 
-env:
-
 jobs:
   deploy:
     name: Deploy to Environment
