@@ -87,7 +87,7 @@ jobs:
         # Alternative: Use SSH if SSM is not available
         # ssh -o StrictHostKeyChecking=no ubuntu@$EC2_IP 'bash -s' < deploy.sh
     
-    - name: Diagnostics (SSM): docker-compose status and logs
+    - name: "Diagnostics (SSM): docker-compose status and logs"
       env:
         ENV: ${{ steps.env-info.outputs.environment }}
         IID: ${{ steps.env-info.outputs.ec2-instance-id }}
