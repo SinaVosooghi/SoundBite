@@ -1,0 +1,48 @@
+name: 'Verify Endpoints'
+description: 'Resolve EC2 public IP and verify health endpoints'
+
+inputs:
+  instance-id:
+    description: 'EC2 instance ID'
+    required: true
+  aws-region:
+    description: 'AWS region'
+    required: false
+    default: 'us-east-1'
+  check-paths:
+    description: 'Newline-separated list of relative paths to check with curl -f'
+    required: true
+
+runs:
+  using: 'composite'
+  steps:
+    - id: ip
+      name: Resolve EC2 IP
+      shell: bash
+      run: |
+        set -euo pipefail
+        EC2_IP=$(aws ec2 describe-instances \
+          --instance-ids "${{ inputs.instance-id }}" \
+          --query 'Reservations[0].Instances[0].PublicIpAddress' \
+          --region "${{ inputs.aws-region }}" \
+          --output text)
+        echo "ip=$EC2_IP" >> $GITHUB_OUTPUT
+
+    - name: Verify endpoints
+      shell: bash
+      run: |
+        set -euo pipefail
+        BASE="http://$${{ steps.ip.outputs.ip }}:8080"
+        while IFS= read -r path; do
+          [ -z "$path" ] && continue
+          echo "Testing $BASE$path"
+          for i in 1 2 3; do
+            if curl -fsS "$BASE$path"; then
+              echo "✅ $path OK"
+              break
+            fi
+            echo "Retry $i for $path..."
+            sleep 2
+          done
+        done <<< "${{ inputs.check-paths }}"
+
