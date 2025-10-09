@@ -32,7 +32,7 @@ runs:
       shell: bash
       run: |
         set -euo pipefail
-        BASE="http://$${{ steps.ip.outputs.ip }}:8080"
+        BASE="http://${{ steps.ip.outputs.ip }}:8080"
         while IFS= read -r path; do
           [ -z "$path" ] && continue
           echo "Testing $BASE$path"
