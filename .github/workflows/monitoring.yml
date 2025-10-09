@@ -71,14 +71,16 @@ jobs:
           
           echo "✅ AWS credentials configured successfully!"
 
-      - name: Check API health
+      - name: Check API health (env-aware IP + path)
         id: api-health
         run: |
-          # Get API instance info from CloudFormation outputs
+          ENV="${{ github.event.inputs.environment || 'staging' }}"
+          STACK="SoundBite-$ENV-API"
+          # Get API instance info from CloudFormation outputs (env-aware)
           API_INSTANCE_ID=$(aws cloudformation describe-stacks \
-            --stack-name SoundBite-dev-API \
+            --stack-name "$STACK" \
             --query "Stacks[0].Outputs[?OutputKey=='ApiInstanceId'].OutputValue" \
-            --output text)
+            --output text 2>/dev/null || true)
           
           if [ -z "$API_INSTANCE_ID" ]; then
             echo "❌ Could not retrieve API instance ID"
@@ -86,7 +88,7 @@ jobs:
             exit 1
           fi
           
-          echo "Checking API instance: $API_INSTANCE_ID"
+          echo "Checking API instance: $API_INSTANCE_ID for $ENV"
 
           # Check if EC2 instance is running
           INSTANCE_STATE=$(aws ec2 describe-instances \
@@ -101,17 +103,19 @@ jobs:
           fi
 
           echo "✅ API instance is running"
-          HEALTH_RESPONSE="200"  # Assume healthy if instance is running
-          
-          if [ "$HEALTH_RESPONSE" = "200" ]; then
-            echo "✅ API health check passed"
-            echo "status=success" >> $GITHUB_OUTPUT
-            cat /tmp/health_response.json
+          PUBLIC_IP=$(aws ec2 describe-instances \
+            --instance-ids "$API_INSTANCE_ID" \
+            --query 'Reservations[0].Instances[0].PublicIpAddress' \
+            --output text)
+          if [ "$ENV" = "production" ]; then HPATH="/prod/health"; else HPATH="/staging/health"; fi
+          echo "Curling http://$PUBLIC_IP$HPATH"
+          STATUS=$(curl -s -o /tmp/health_body -w "%{http_code}" http://$PUBLIC_IP$HPATH || true)
+          echo "Status: $STATUS"
+          head -200 /tmp/health_body || true
+          if [ "$STATUS" = "200" ]; then
+            echo "✅ API health check passed"; echo "status=success" >> $GITHUB_OUTPUT
           else
-            echo "❌ API health check failed with status: $HEALTH_RESPONSE"
-            echo "status=failed" >> $GITHUB_OUTPUT
-            cat /tmp/health_response.json || echo "No response body"
-            exit 1
+            echo "❌ API health check failed ($STATUS)"; echo "status=failed" >> $GITHUB_OUTPUT; exit 1
           fi
 
       - name: Check DynamoDB table

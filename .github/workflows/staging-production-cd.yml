@@ -80,8 +80,8 @@ jobs:
       with:
         dockerfile: ${{ steps.cfg.outputs.dockerfile-prod }}
         image-name: soundbite-${{ steps.env-info.outputs.tag }}
-        ecr-registry: ${{ steps.cfg.outputs.ecr-registry }}
-        ecr-repository: ${{ steps.cfg.outputs.ecr-repository }}
+        ecr-registry: ${{ vars.ECR_REGISTRY || steps.cfg.outputs.ecr-registry }}
+        ecr-repository: ${{ vars.ECR_REPOSITORY || steps.cfg.outputs.ecr-repository }}
         tag: ${{ steps.env-info.outputs.tag }}
         aws-region: ${{ steps.cfg.outputs.aws-region }}
         
@@ -96,8 +96,8 @@ jobs:
       with:
         instance-id: ${{ steps.target-ec2.outputs.instance-id }}
         environment: ${{ steps.env-info.outputs.environment }}
-        ecr-registry: ${{ steps.cfg.outputs.ecr-registry }}
-        ecr-repository: ${{ steps.cfg.outputs.ecr-repository }}
+        ecr-registry: ${{ vars.ECR_REGISTRY || steps.cfg.outputs.ecr-registry }}
+        ecr-repository: ${{ vars.ECR_REPOSITORY || steps.cfg.outputs.ecr-repository }}
         image-tag: ${{ steps.env-info.outputs.tag }}
         aws-region: ${{ steps.cfg.outputs.aws-region }}
         
@@ -121,6 +121,10 @@ jobs:
             \"docker ps -a\",
             \"echo ==== docker-compose ps ====\",
             \"docker-compose -f /home/ec2-user/docker-compose.ec2.yml ps || true\",
+            \"echo ==== docker inspect ports: nginx ====\",
+            \"docker inspect --format='{{json .NetworkSettings.Ports}}' soundbite-nginx | jq . || true\",
+            \"echo ==== docker inspect ports: service ====\",
+            \"docker inspect --format='{{json .NetworkSettings.Ports}}' soundbite-$ENV | jq . || true\",
             \"echo ==== nginx logs tail 200 ====\",
             \"docker-compose -f /home/ec2-user/docker-compose.ec2.yml logs --tail=200 nginx || true\",
             \"echo ==== service logs tail 200 ====\",
@@ -157,6 +161,19 @@ jobs:
         aws-region: ${{ steps.cfg.outputs.aws-region }}
         check-paths: |
           ${{ steps.env-info.outputs.environment == 'production' && steps.cfg.outputs.health-path-prod || steps.cfg.outputs.health-path-staging }}
+
+    - name: Canary check (staging only)
+      if: ${{ steps.env-info.outputs.environment == 'staging' }}
+      run: |
+        set -euo pipefail
+        EC2_IP=$(aws ec2 describe-instances \
+          --instance-ids ${{ steps.target-ec2.outputs.instance-id }} \
+          --query 'Reservations[0].Instances[0].PublicIpAddress' \
+          --output text)
+        curl -sS -X POST http://$EC2_IP/staging/soundbite \
+          -H "Content-Type: application/json" \
+          -H "Idempotency-Key: 00000000-0000-0000-0000-000000000001" \
+          -d '{"text":"staging canary","voiceId":"Joanna"}' | head -200 || true
         
     - name: Notify deployment status
       if: always()
