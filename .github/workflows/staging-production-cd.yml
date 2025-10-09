@@ -23,7 +23,6 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  DOCKER_PROD_FILE: ${{ steps.cfg.outputs.dockerfile-prod }}
 
 jobs:
   deploy:
@@ -64,7 +63,7 @@ jobs:
       id: image-tag
       uses: ./.github/actions/docker-build-push
       with:
-        dockerfile: ${{ env.DOCKER_PROD_FILE }}
+        dockerfile: ${{ steps.cfg.outputs.dockerfile-prod }}
         image-name: soundbite-${{ steps.env-info.outputs.tag }}
         ecr-registry: ${{ steps.cfg.outputs.ecr-registry }}
         ecr-repository: ${{ steps.cfg.outputs.ecr-repository }}
