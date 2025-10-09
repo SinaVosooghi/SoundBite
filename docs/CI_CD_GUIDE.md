@@ -11,10 +11,13 @@ This guide covers the complete CI/CD pipeline for SoundBite, including automated
 - **`staging`** → Staging Environment (EC2) 
 - **`master`** → Production Environment (EC2)
 
-### Workflow Files
-1. **`ci-enhanced.yml`** - Main CI/CD pipeline
-2. **`promote-environment.yml`** - Manual environment promotion
-3. **`rollback-environment.yml`** - Emergency rollback
+### Workflow Files (Implemented)
+1. **`dev-ci.yml`** – Dev CI (lint, test, build, LocalStack probe)
+2. **`staging-production-ci.yml`** – CI for staging/master (lint, test, build, Docker run health)
+3. **`staging-production-cd.yml`** – CD to staging/master (SSM → EC2, health verification)
+4. **`promote-environment.yml`** – Manual environment promotion (tag re-use)
+5. **`rollback-environment.yml`** – Manual rollback
+6. **`monitoring.yml`** – Scheduled and manual health/security checks
 
 ## CI/CD Pipeline Stages
 
@@ -38,19 +41,18 @@ This guide covers the complete CI/CD pipeline for SoundBite, including automated
 
 ### Development Environment
 - **Trigger**: Push to `dev` branch
-- **Dockerfile**: `Dockerfile.dev-aws-deployed`
-- **ECR Tag**: `dev-aws-deployed`
+- **Dockerfile**: N/A (build + runtime checks in CI with `Dockerfile.dev` where applicable)
 - **Infrastructure**: `SoundBite-development-*` (prefix: `dev`)
 
 ### Staging Environment
 - **Trigger**: Push to `staging` branch
-- **Dockerfile**: `Dockerfile.staging` (same as production)
+- **Dockerfile**: `Dockerfile` (shared with production)
 - **ECR Tag**: `staging`
 - **Infrastructure**: `SoundBite-staging-*` (prefix: `staging`)
 
 ### Production Environment
 - **Trigger**: Push to `master` branch
-- **Dockerfile**: `Dockerfile.staging` (same as staging)
+- **Dockerfile**: `Dockerfile` (shared with staging)
 - **ECR Tag**: `production`
 - **Infrastructure**: `SoundBite-production-*` (prefix: `prod`)
 

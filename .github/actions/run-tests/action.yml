@@ -1,0 +1,73 @@
+name: 'Run Tests and Build'
+description: 'Run linting, tests, and build the application'
+
+inputs:
+  node-env:
+    description: 'Node environment for tests'
+    required: false
+    default: 'test'
+  aws-region:
+    description: 'AWS region for tests'
+    required: false
+    default: 'us-east-1'
+  aws-access-key-id:
+    description: 'AWS access key ID for tests'
+    required: false
+    default: 'test'
+  aws-secret-access-key:
+    description: 'AWS secret access key for tests'
+    required: false
+    default: 'test'
+  aws-endpoint:
+    description: 'AWS endpoint for tests (optional)'
+    required: false
+    default: ''
+  table-name:
+    description: 'DynamoDB table name for tests'
+    required: false
+    default: 'SoundbitesTable'
+  queue-name:
+    description: 'SQS queue name for tests'
+    required: false
+    default: 'SoundbiteQueue'
+  s3-bucket:
+    description: 'S3 bucket name for tests'
+    required: false
+    default: 'soundbitesbucket'
+  sqs-queue-url:
+    description: 'SQS queue URL for tests (optional)'
+    required: false
+    default: ''
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Run linting
+      shell: bash
+      run: |
+        set -euo pipefail
+        yarn lint
+      
+    - name: Run tests
+      shell: bash
+      run: |
+        set -euo pipefail
+        yarn test
+      env:
+        NODE_ENV: ${{ inputs.node-env }}
+        AWS_REGION: ${{ inputs.aws-region }}
+        AWS_ACCESS_KEY_ID: ${{ inputs.aws-access-key-id }}
+        AWS_SECRET_ACCESS_KEY: ${{ inputs.aws-secret-access-key }}
+        AWS_ENDPOINT: ${{ inputs.aws-endpoint }}
+        TABLE_NAME: ${{ inputs.table-name }}
+        QUEUE_NAME: ${{ inputs.queue-name }}
+        S3_BUCKET: ${{ inputs.s3-bucket }}
+        SQS_QUEUE_URL: ${{ inputs.sqs-queue-url }}
+        
+    - name: Build application
+      shell: bash
+      run: |
+        set -euo pipefail
+        yarn build
+
+

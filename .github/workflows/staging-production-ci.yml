@@ -22,33 +22,11 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  # Node.js Configuration
-  NODE_VERSION: '22'
-  YARN_VERSION: '4.9.4'
-  
-  # AWS Configuration
-  AWS_REGION: us-east-1
-  AWS_ACCOUNT_ID: 762233763891
-  ECR_REGISTRY: 762233763891.dkr.ecr.us-east-1.amazonaws.com
-  ECR_REPOSITORY: soundbite-development-api
-  
-  # AWS Service Configuration
-  TABLE_NAME: SoundbitesTable
-  QUEUE_NAME: SoundbiteQueue
-  S3_BUCKET: soundbitesbucket
-  
-  
   # Docker Configuration
   DOCKER_PROD_FILE: ./Dockerfile
   CONTAINER_PORT: 3001
   HEALTH_CHECK_PORT: 3001
-  
-  # AWS IAM Configuration
-  AWS_ROLE_NAME: GitHubActions-SoundBite-Prod
-  
-  # Test Configuration
-  TEST_TIMEOUT: 30
-  HEALTH_CHECK_TIMEOUT: 30
+
 
 jobs:
   test-and-push:
@@ -66,136 +44,35 @@ jobs:
     
     
     steps:
-    # Step 1: Lint, unit test, build
-    - name: Checkout code
-      uses: actions/checkout@v4
-      
-    - name: Setup Node.js
-      uses: actions/setup-node@v4
+    # Step 0: Load shared project config
+    - name: Load Project Config
+      id: cfg
+      uses: ./.github/actions/project-config
+
+    # Step 1: Setup Node.js environment and run tests
+    - name: Setup Node.js Environment
+      uses: ./.github/actions/setup-node-environment
       with:
-        node-version: ${{ env.NODE_VERSION }}
-        cache: 'yarn'
-        
-    - name: Enable Corepack
-      run: corepack enable
-        
-    - name: Setup Yarn
-      run: corepack prepare yarn@${{ env.YARN_VERSION }} --activate
-        
-    - name: Install dependencies
-      run: yarn install --immutable
+        node-version: ${{ steps.cfg.outputs.node-version }}
+        yarn-version: ${{ steps.cfg.outputs.yarn-version }}
       
-    - name: Run linting
-      run: yarn lint
-      
-    - name: Run tests
-      run: yarn test
-      env:
-        NODE_ENV: test
-        AWS_REGION: ${{ env.AWS_REGION }}
-        AWS_ACCESS_KEY_ID: test
-        AWS_SECRET_ACCESS_KEY: test
-        TABLE_NAME: ${{ env.TABLE_NAME }}
-        QUEUE_NAME: ${{ env.QUEUE_NAME }}
-        S3_BUCKET: ${{ env.S3_BUCKET }}
-        
-    - name: Build application
-      run: yarn build
+    - name: Run Tests and Build
+      uses: ./.github/actions/run-tests
+      with:
+        node-env: test
+        aws-region: ${{ steps.cfg.outputs.aws-region }}
+        aws-access-key-id: ${{ steps.cfg.outputs.aws-access-key-id }}
+        aws-secret-access-key: ${{ steps.cfg.outputs.aws-secret-access-key }}
+        table-name: ${{ steps.cfg.outputs.table-name }}
+        queue-name: ${{ steps.cfg.outputs.queue-name }}
+        s3-bucket: ${{ steps.cfg.outputs.s3-bucket }}
       
     # Step 3: Determine environment and tags
     - name: Determine environment and tags
       id: env-info
-      run: |
-        # For pull requests, use base_ref (target branch)
-        # For push events, use ref (source branch)
-        if [[ "${{ github.event_name }}" == "pull_request" ]]; then
-          BRANCH="${{ github.base_ref }}"
-        else
-          BRANCH="${{ github.ref }}"
-          BRANCH="${BRANCH#refs/heads/}"
-        fi
+      uses: ./.github/actions/determine-environment
         
-        if [[ "$BRANCH" == "master" ]]; then
-          echo "environment=production" >> $GITHUB_OUTPUT
-          echo "tag=production" >> $GITHUB_OUTPUT
-        elif [[ "$BRANCH" == "staging" ]]; then
-          echo "environment=staging" >> $GITHUB_OUTPUT
-          echo "tag=staging" >> $GITHUB_OUTPUT
-        else
-          echo "❌ This workflow should only run on staging or master branches"
-          echo "Current branch/target: $BRANCH"
-          echo "Event: ${{ github.event_name }}"
-          echo "Ref: ${{ github.ref }}"
-          echo "Base ref: ${{ github.base_ref }}"
-          exit 1
-        fi
-        
-    # Step 4: Build and Test Production Docker image
-    - name: Build and Test Production Docker image
-      run: |
-        echo "Building production Docker image for ${{ steps.env-info.outputs.tag }} environment..."
-        docker build -f ${{ env.DOCKER_PROD_FILE }} -t soundbite-${{ steps.env-info.outputs.tag }}:latest .
-        echo "✅ Production Docker image built successfully"
-        
-        echo "Testing production Docker container..."
-        
-        # Start container
-        docker run -d \
-          --name test-${{ steps.env-info.outputs.tag }}-container \
-          -p ${{ env.CONTAINER_PORT }}:3000 \
-          -e NODE_ENV=${{ steps.env-info.outputs.environment }} \
-          -e AWS_REGION=${{ env.AWS_REGION }} \
-          -e TABLE_NAME=${{ env.TABLE_NAME }} \
-          -e QUEUE_NAME=${{ env.QUEUE_NAME }} \
-          -e S3_BUCKET=${{ env.S3_BUCKET }} \
-          soundbite-${{ steps.env-info.outputs.tag }}:latest
-        
-        # Wait for container to start
-        for i in {1..${{ env.HEALTH_CHECK_TIMEOUT }}}; do
-          if curl -s http://localhost:${{ env.HEALTH_CHECK_PORT }}/health > /dev/null 2>&1; then
-            echo "✅ Docker container started successfully"
-            break
-          fi
-          echo "Waiting for container... ($i/${{ env.HEALTH_CHECK_TIMEOUT }})"
-          sleep 2
-        done
-        
-        # Test health endpoint
-        curl -f http://localhost:${{ env.HEALTH_CHECK_PORT }}/health
-        
-        # Test API endpoint
-        curl -f http://localhost:${{ env.HEALTH_CHECK_PORT }}/
-        
-        # Clean up
-        docker stop test-${{ steps.env-info.outputs.tag }}-container || true
-        docker rm test-${{ steps.env-info.outputs.tag }}-container || true
-        
-        
-    # Step 5: Push image to ECR (only on staging branch pushes)
-    - name: Configure AWS credentials
-      if: github.ref == 'refs/heads/staging'
-      uses: aws-actions/configure-aws-credentials@v4
-      with:
-        role-to-assume: arn:aws:iam::${{ env.AWS_ACCOUNT_ID }}:role/${{ env.AWS_ROLE_NAME }}
-        aws-region: ${{ env.AWS_REGION }}
-        
-    - name: Login to Amazon ECR
-      if: github.ref == 'refs/heads/staging'
-      id: login-ecr
-      uses: aws-actions/amazon-ecr-login@v2
-      
-    - name: Push Docker image to ECR
-      if: github.ref == 'refs/heads/staging'
-      uses: docker/build-push-action@v5
-      with:
-        context: .
-        file: ${{ env.DOCKER_PROD_FILE }}
-        push: true
-        tags: |
-          ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:${{ steps.env-info.outputs.tag }}
-          ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:${{ github.sha }}
-        cache-from: type=gha
-        platforms: linux/amd64
+    # Docker build/push moved to CD. CI only validates app (lint/tests/build) now.
         
     # Step 6: Upload build artifacts
     - name: Upload build artifacts

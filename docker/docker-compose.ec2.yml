@@ -5,7 +5,7 @@ version: '3.8'
 services:
   # Staging Environment
   soundbite-staging:
-    image: 762233763891.dkr.ecr.us-east-1.amazonaws.com/soundbite-development-api:staging
+    image: ${ECR_REGISTRY}/${ECR_REPOSITORY}:${STAGING_TAG:-staging}
     container_name: soundbite-staging
     environment:
       - NODE_ENV=staging
@@ -31,7 +31,7 @@ services:
 
   # Production Environment
   soundbite-production:
-    image: 762233763891.dkr.ecr.us-east-1.amazonaws.com/soundbite-development-api:staging
+    image: ${ECR_REGISTRY}/${ECR_REPOSITORY}:${PRODUCTION_TAG:-production}
     container_name: soundbite-production
     environment:
       - NODE_ENV=production

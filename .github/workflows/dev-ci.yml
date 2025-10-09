@@ -14,9 +14,6 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  NODE_VERSION: '22'
-  YARN_VERSION: '4.9.4'
-  AWS_REGION: us-east-1
 
 jobs:
   test-and-build:
@@ -36,43 +33,30 @@ jobs:
           --health-interval=10s --health-timeout=5m --health-retries=10
     
     steps:
-    # Step 1: Lint, unit test, build
-    - name: Checkout code
-      uses: actions/checkout@v4
-      
-    - name: Setup Node.js
-      uses: actions/setup-node@v4
+    # Step 0: Load shared project config
+    - name: Load Project Config
+      id: cfg
+      uses: ./.github/actions/project-config
+
+    # Step 1: Setup Node.js environment and run tests
+    - name: Setup Node.js Environment
+      uses: ./.github/actions/setup-node-environment
       with:
-        node-version: ${{ env.NODE_VERSION }}
-        cache: 'yarn'
-        
-    - name: Enable Corepack
-      run: corepack enable
-        
-    - name: Setup Yarn
-      run: corepack prepare yarn@${{ env.YARN_VERSION }} --activate
-        
-    - name: Install dependencies
-      run: yarn install --immutable
+        node-version: ${{ steps.cfg.outputs.node-version }}
+        yarn-version: ${{ steps.cfg.outputs.yarn-version }}
       
-    - name: Run linting
-      run: yarn lint
-      
-    - name: Run tests
-      run: yarn test
-      env:
-        NODE_ENV: test
-        AWS_REGION: us-east-1
-        AWS_ACCESS_KEY_ID: test
-        AWS_SECRET_ACCESS_KEY: test
-        AWS_ENDPOINT: http://localhost:4566
-        TABLE_NAME: SoundbitesTable
-        QUEUE_NAME: SoundbiteQueue
-        S3_BUCKET: soundbitesbucket
-        SQS_QUEUE_URL: http://sqs.us-east-1.localhost.localstack.cloud:4566/000000000000/SoundbiteQueue
-        
-    - name: Build application
-      run: yarn build
+    - name: Run Tests and Build
+      uses: ./.github/actions/run-tests
+      with:
+        node-env: test
+        aws-region: ${{ steps.cfg.outputs.aws-region }}
+        aws-access-key-id: ${{ steps.cfg.outputs.aws-access-key-id }}
+        aws-secret-access-key: ${{ steps.cfg.outputs.aws-secret-access-key }}
+        aws-endpoint: ${{ steps.cfg.outputs.aws-endpoint }}
+        table-name: ${{ steps.cfg.outputs.table-name }}
+        queue-name: ${{ steps.cfg.outputs.queue-name }}
+        s3-bucket: ${{ steps.cfg.outputs.s3-bucket }}
+        sqs-queue-url: http://sqs.${{ steps.cfg.outputs.aws-region }}.localhost.localstack.cloud:4566/000000000000/${{ steps.cfg.outputs.queue-name }}
       
     # Step 2: Start dev server with LocalStack (test integration)
     - name: Test dev server with LocalStack
@@ -98,20 +82,20 @@ jobs:
         kill $DEV_PID 2>/dev/null || true
       env:
         NODE_ENV: development-localstack
-        AWS_REGION: us-east-1
-        AWS_ACCESS_KEY_ID: test
-        AWS_SECRET_ACCESS_KEY: test
-        AWS_ENDPOINT: http://localhost:4566
-        TABLE_NAME: SoundbitesTable
-        QUEUE_NAME: SoundbiteQueue
-        S3_BUCKET: soundbitesbucket
-        SQS_QUEUE_URL: http://sqs.us-east-1.localhost.localstack.cloud:4566/000000000000/SoundbiteQueue
+        AWS_REGION: ${{ steps.cfg.outputs.aws-region }}
+        AWS_ACCESS_KEY_ID: ${{ steps.cfg.outputs.aws-access-key-id }}
+        AWS_SECRET_ACCESS_KEY: ${{ steps.cfg.outputs.aws-secret-access-key }}
+        AWS_ENDPOINT: ${{ steps.cfg.outputs.aws-endpoint }}
+        TABLE_NAME: ${{ steps.cfg.outputs.table-name }}
+        QUEUE_NAME: ${{ steps.cfg.outputs.queue-name }}
+        S3_BUCKET: ${{ steps.cfg.outputs.s3-bucket }}
+        SQS_QUEUE_URL: http://sqs.${{ steps.cfg.outputs.aws-region }}.localhost.localstack.cloud:4566/000000000000/${{ steps.cfg.outputs.queue-name }}
         
     # Step 3: Build and Test Docker + AWS infra
     - name: Build and Test Docker container with AWS infra
       run: |
         echo "Building Docker image for dev environment..."
-        docker build -f ./Dockerfile.dev -t soundbite-dev:latest .
+        docker build -f "${{ steps.cfg.outputs.dockerfile-dev }}" -t soundbite-dev:latest .
         echo "✅ Docker image built successfully"
         
         echo "Testing Docker container with AWS infrastructure..."
@@ -121,19 +105,19 @@ jobs:
           --name test-dev-container \
           -p 3001:3000 \
           -e NODE_ENV=development-localstack \
-          -e AWS_REGION=us-east-1 \
-          -e AWS_ACCESS_KEY_ID=test \
-          -e AWS_SECRET_ACCESS_KEY=test \
+          -e AWS_REGION=${{ steps.cfg.outputs.aws-region }} \
+          -e AWS_ACCESS_KEY_ID=${{ steps.cfg.outputs.aws-access-key-id }} \
+          -e AWS_SECRET_ACCESS_KEY=${{ steps.cfg.outputs.aws-secret-access-key }} \
           -e AWS_ENDPOINT=http://localhost:4566 \
-          -e TABLE_NAME=SoundbitesTable \
-          -e QUEUE_NAME=SoundbiteQueue \
-          -e S3_BUCKET=soundbitesbucket \
-          -e SQS_QUEUE_URL=http://sqs.us-east-1.localhost.localstack.cloud:4566/000000000000/SoundbiteQueue \
+          -e TABLE_NAME=${{ steps.cfg.outputs.table-name }} \
+          -e QUEUE_NAME=${{ steps.cfg.outputs.queue-name }} \
+          -e S3_BUCKET=${{ steps.cfg.outputs.s3-bucket }} \
+          -e SQS_QUEUE_URL=http://sqs.${{ steps.cfg.outputs.aws-region }}.localhost.localstack.cloud:4566/000000000000/${{ steps.cfg.outputs.queue-name }} \
           soundbite-dev:latest
         
         # Wait for container to start
         for i in {1..30}; do
-          if curl -s http://localhost:3001/health > /dev/null 2>&1; then
+          if curl -s http://localhost:3001${{ steps.cfg.outputs.health-path-common }} > /dev/null 2>&1; then
             echo "✅ Docker container started successfully"
             break
           fi
@@ -142,7 +126,7 @@ jobs:
         done
         
         # Test health endpoint
-        curl -f http://localhost:3001/health
+        curl -f http://localhost:3001${{ steps.cfg.outputs.health-path-common }}
         
         # Test API endpoint
         curl -f http://localhost:3001/

@@ -1,8 +1,9 @@
 # API Reference
 
 ## Base URL
-- **Development**: `http://localhost:3000`
-- **Production**: `https://api.soundbite.com` (planned)
+- **Dev LocalStack**: `http://localhost:3000`
+- **Dev AWS (local app) **: `http://localhost:3001`
+- **Staging (EC2 mapping)**: as reported by CD workflow (e.g., `http://<ip>:3001`)
 
 ## Authentication
 All API requests require a valid JWT token in the Authorization header:
@@ -26,72 +27,38 @@ Check the health status of the API.
 }
 ```
 
-### Upload Audio File
-Upload an audio file for processing.
+> Planned (not yet implemented): file-upload pipeline endpoints: `/api/upload`, `/api/process`, `/api/status/{fileId}`, `/api/download/{fileId}`. Specs retained below in Planned section.
 
-**POST** `/api/upload`
+### Create Soundbite (TTS)
+Create a text-to-speech soundbite job.
 
-**Content-Type:** `multipart/form-data`
+**POST** `/soundbite`
 
-**Parameters:**
-- `file` (required): Audio file (MP3, WAV, M4A)
-- `idempotencyKey` (required): Unique key to prevent duplicate processing
-
-**Response:**
-```json
-{
-  "success": true,
-  "message": "Audio file uploaded successfully",
-  "data": {
-    "fileId": "soundbite-abc123def456",
-    "originalName": "audio.mp3",
-    "size": 1024000,
-    "mimeType": "audio/mpeg",
-    "uploadedAt": "2025-09-04T15:30:00.000Z",
-    "status": "uploaded"
-  }
-}
-```
-
-### Process Audio File
-Start processing an uploaded audio file.
-
-**POST** `/api/process`
-
-**Content-Type:** `application/json`
+**Headers:**
+- `Idempotency-Key`: UUID v4 (required)
 
 **Request Body:**
 ```json
 {
-  "fileId": "soundbite-abc123def456",
-  "idempotencyKey": "process-1234567890",
-  "options": {
-    "quality": "high",
-    "format": "wav",
-    "bitrate": 320
-  }
+  "text": "Hello world",
+  "voiceId": "Joanna",
+  "userId": "optional-user-id"
 }
 ```
 
-**Response:**
+**Response (201):**
 ```json
 {
-  "success": true,
-  "message": "Audio processing started",
-  "data": {
-    "fileId": "soundbite-abc123def456",
-    "processId": "process-xyz789",
-    "status": "processing",
-    "startedAt": "2025-09-04T15:30:30.000Z",
-    "estimatedDuration": "00:02:30"
-  }
+  "id": "d09347d0-fbbe-48d2-be59-d12a77ff10fe",
+  "status": "created",
+  "url": "https://.../soundbites/d09347d0-fbbe-48d2-be59-d12a77ff10fe.mp3"
 }
 ```
 
-### Check Processing Status
-Get the current status of a processing job.
+### Get Soundbite
+Get the current status/result of a created soundbite.
 
-**GET** `/api/status/{fileId}`
+**GET** `/soundbite/{id}`
 
 **Response:**
 ```json
@@ -116,13 +83,19 @@ Get the current status of a processing job.
 }
 ```
 
+## Planned: File Upload Pipeline (Not Implemented Yet)
+
+### Upload Audio File
+**POST** `/api/upload` (multipart/form-data)
+
+### Process Audio File
+**POST** `/api/process` (application/json)
+
+### Check Processing Status
+**GET** `/api/status/{fileId}`
+
 ### Download Processed File
-Download a processed audio file.
-
 **GET** `/api/download/{fileId}`
-
-**Response:**
-- Binary file data (audio file)
 
 ### List Files
 Get a list of uploaded files.

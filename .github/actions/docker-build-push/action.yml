@@ -1,0 +1,56 @@
+name: 'Docker Build and Push'
+description: 'Builds a Docker image, logs into ECR, tags, and pushes'
+
+inputs:
+  dockerfile:
+    description: 'Dockerfile path'
+    required: false
+    default: './Dockerfile'
+  image-name:
+    description: 'Local image name prefix'
+    required: true
+  ecr-registry:
+    description: 'ECR registry url'
+    required: true
+  ecr-repository:
+    description: 'ECR repository name'
+    required: true
+  tag:
+    description: 'Tag to push'
+    required: true
+  aws-region:
+    description: 'AWS region for ECR login'
+    required: false
+    default: 'us-east-1'
+
+outputs:
+  full-image:
+    description: 'Full ECR image reference pushed'
+    value: ${{ steps.out.outputs.full-image }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Build Docker image
+      shell: bash
+      run: |
+        set -euo pipefail
+        docker build -f "${{ inputs.dockerfile }}" -t "${{ inputs.image-name }}:${{ inputs.tag }}" .
+
+    - name: Login to ECR
+      shell: bash
+      run: |
+        set -euo pipefail
+        aws ecr get-login-password --region "${{ inputs.aws-region }}" | docker login --username AWS --password-stdin "${{ inputs.ecr-registry }}"
+
+    - name: Tag and push
+      shell: bash
+      run: |
+        set -euo pipefail
+        docker tag "${{ inputs.image-name }}:${{ inputs.tag }}" "${{ inputs.ecr-registry }}/${{ inputs.ecr-repository }}:${{ inputs.tag }}"
+        docker push "${{ inputs.ecr-registry }}/${{ inputs.ecr-repository }}:${{ inputs.tag }}"
+
+    - id: out
+      shell: bash
+      run: echo "full-image=${{ inputs.ecr-registry }}/${{ inputs.ecr-repository }}:${{ inputs.tag }}" >> $GITHUB_OUTPUT
+
