@@ -58,9 +58,18 @@ runs:
       shell: bash
       run: |
         set -euo pipefail
-        cd lambda/processor
-        yarn install --immutable
-        yarn build
+        echo "🔨 Building Lambda processor..."
+        
+        # Ensure output directory exists
+        mkdir -p cdk/dist/lambda-processor
+        
+        # Compile TypeScript to JavaScript from lambda directory
+        cd lambda
+        npx tsc --outDir ../cdk/dist/lambda-processor processor/index.ts processor/logger.ts
+        
+        echo "✅ Lambda processor compiled successfully"
+        echo "📁 Compiled files:"
+        ls -la ../cdk/dist/lambda-processor/
         
     - name: Deploy infrastructure stacks
       id: deploy
