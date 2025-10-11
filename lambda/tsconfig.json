@@ -6,7 +6,9 @@
     "outDir": "../cdk/dist/lambda-processor",
     "strict": true,
     "esModuleInterop": true,
-    "skipLibCheck": true
+    "skipLibCheck": true,
+    "types": ["node"],
+    "typeRoots": ["../cdk/node_modules/@types"]
   },
   "include": ["processor/index.ts"]
 } 
