@@ -60,16 +60,19 @@ runs:
         set -euo pipefail
         echo "🔨 Building Lambda processor..."
         
-        # Ensure output directory exists
-        mkdir -p cdk/dist/lambda-processor
+        # Install Lambda dependencies
+        cd lambda
+        yarn install --immutable
         
-        # Compile TypeScript to JavaScript using CDK's TypeScript installation
-        cd cdk
-        npx tsc --project ../lambda/tsconfig.json --outDir dist/lambda-processor
+        # Ensure output directory exists
+        mkdir -p ../cdk/dist/lambda-processor
+        
+        # Compile TypeScript to JavaScript
+        npx tsc
         
         echo "✅ Lambda processor compiled successfully"
         echo "📁 Compiled files:"
-        ls -la dist/lambda-processor/
+        ls -la ../cdk/dist/lambda-processor/
         
     - name: Deploy infrastructure stacks
       id: deploy
