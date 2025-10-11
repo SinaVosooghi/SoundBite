@@ -18,7 +18,7 @@ export const stagingConfig = {
     },
     sqs: {
       queueUrl:
-        'https://sqs.us-east-1.amazonaws.com/762233763891/SoundBite-MultiEnv-SoundbiteQueue',
+        'https://sqs.us-east-1.amazonaws.com/762233763891/SoundBite-staging-SoundbiteQueue',
       endpoint: undefined,
     },
   },
