@@ -151,11 +151,14 @@ runs:
         fi
         
         # Check S3 bucket
-        BUCKET_NAME="soundbite-$ENVIRONMENT-soundbites"
-        if aws s3 ls "s3://$BUCKET_NAME" >/dev/null 2>&1; then
-          echo "✅ S3 bucket exists"
+        # S3 bucket names include account ID suffix, so we need to find the actual bucket name
+        BUCKET_PREFIX="soundbite-$ENVIRONMENT-soundbites"
+        BUCKET_NAME=$(aws s3 ls --region us-east-1 | grep "$BUCKET_PREFIX" | awk '{print $3}' | head -1)
+        
+        if [ -n "$BUCKET_NAME" ] && aws s3 ls "s3://$BUCKET_NAME" >/dev/null 2>&1; then
+          echo "✅ S3 bucket exists: $BUCKET_NAME"
         else
-          echo "❌ S3 bucket not found"
+          echo "❌ S3 bucket not found with prefix: $BUCKET_PREFIX"
           exit 1
         fi
         
