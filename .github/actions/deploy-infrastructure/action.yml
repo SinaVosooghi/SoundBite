@@ -75,6 +75,9 @@ runs:
         
         cd cdk
         
+        # Set CDK environment variable for the app
+        export CDK_ENVIRONMENT="$ENVIRONMENT"
+        
         if [ "$STRATEGY" = "shared" ]; then
           echo "📦 Deploying shared multi-environment stacks..."
           npx cdk deploy SoundBite-Shared-* --require-approval "$APPROVAL" --outputs-file ../deployment-outputs.json
