@@ -51,6 +51,7 @@ export class ComputeStack extends cdk.Stack {
     // Grant specific permissions
     props.messageQueue.grantConsumeMessages(this.lambdaRole);
     props.storageBucket.grantWrite(this.lambdaRole);
+    props.storageBucket.grantRead(this.lambdaRole);
     props.databaseTable.grantWriteData(this.lambdaRole);
 
     // Polly permissions
@@ -74,7 +75,10 @@ export class ComputeStack extends cdk.Stack {
       environment: {
         BUCKET_NAME: props.storageBucket.bucketName,
         TABLE_NAME: props.databaseTable.tableName,
-        NODE_ENV: props.environment === 'development' ? 'development-localstack' : props.environment,
+        NODE_ENV:
+          props.environment === 'development'
+            ? 'development-localstack'
+            : props.environment,
       },
       logRetention: logs.RetentionDays.ONE_WEEK,
     });
