@@ -50,7 +50,7 @@ export const environments: Record<string, EnvironmentConfig> = {
     retentionDays: 30,
     features: ['basic', 'monitoring', 'testing'],
     description: 'Staging environment for testing and validation',
-    enableMultiEnvironment: true,
+    enableMultiEnvironment: false,
   },
   production: {
     name: 'production',
@@ -62,7 +62,7 @@ export const environments: Record<string, EnvironmentConfig> = {
     enableBackup: true,
     retentionDays: 90,
     features: ['full', 'monitoring', 'backup', 'scaling'],
-    enableMultiEnvironment: true,
+    enableMultiEnvironment: false,
     description: 'Production environment for live users',
   },
 };
