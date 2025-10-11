@@ -12,6 +12,7 @@ node_modules/
 /build/
 /cdk/cdk.out/
 /cdk.out/
+/cdk/dist/
 
 # Lambda build artifacts
 /lambda/processor/*.js
