@@ -57,6 +57,15 @@ jobs:
       with:
         default-ec2-instance-id: ${{ steps.cfg.outputs.default-ec2-instance-id }}
         
+    - name: Deploy infrastructure
+      id: infra-deploy
+      uses: ./.github/actions/deploy-infrastructure
+      with:
+        environment: ${{ steps.env-info.outputs.environment }}
+        aws-region: ${{ steps.cfg.outputs.aws-region }}
+        deployment-strategy: 'individual'
+        require-approval: 'never'
+        
     - name: Resolve target EC2 instance by environment
       id: target-ec2
       run: |
@@ -64,15 +73,45 @@ jobs:
         ENV="${{ steps.env-info.outputs.environment }}"
         STACK_NAME="SoundBite-$ENV-API"
         echo "Resolving EC2 instance for stack: $STACK_NAME"
-        INSTANCE_ID=$(aws cloudformation describe-stacks \
-          --stack-name "$STACK_NAME" \
-          --query "Stacks[0].Outputs[?OutputKey=='ApiInstanceId'].OutputValue" \
-          --output text 2>/dev/null || true)
+        
+        # Try to get instance ID from infrastructure deployment outputs first
+        if [ -f "deployment-outputs.json" ]; then
+          INSTANCE_ID=$(jq -r ".\"$STACK_NAME\".ApiInstanceId // empty" deployment-outputs.json 2>/dev/null || true)
+          if [ -n "$INSTANCE_ID" ] && [ "$INSTANCE_ID" != "null" ]; then
+            echo "Found instance ID from deployment outputs: $INSTANCE_ID"
+          fi
+        fi
+        
+        # Fallback to CloudFormation query
+        if [ -z "$INSTANCE_ID" ] || [ "$INSTANCE_ID" = "null" ]; then
+          INSTANCE_ID=$(aws cloudformation describe-stacks \
+            --stack-name "$STACK_NAME" \
+            --query "Stacks[0].Outputs[?OutputKey=='ApiInstanceId'].OutputValue" \
+            --output text 2>/dev/null || true)
+        fi
+        
+        # Final fallback to default
         if [ -z "$INSTANCE_ID" ] || [ "$INSTANCE_ID" = "None" ] || [ "$INSTANCE_ID" = "N/A" ]; then
           INSTANCE_ID="${{ steps.env-info.outputs.ec2-instance-id }}"
           echo "Falling back to default instance id: $INSTANCE_ID"
         fi
+        
         echo "instance-id=$INSTANCE_ID" >> $GITHUB_OUTPUT
+        
+    - name: Verify infrastructure deployment
+      run: |
+        set -euo pipefail
+        ENV="${{ steps.env-info.outputs.environment }}"
+        
+        echo "🔍 Verifying infrastructure deployment for $ENV..."
+        
+        # Check if infrastructure deployment was successful
+        if [ "${{ steps.infra-deploy.outputs.deployment-status }}" != "success" ]; then
+          echo "❌ Infrastructure deployment failed"
+          exit 1
+        fi
+        
+        echo "✅ Infrastructure deployment verified successfully"
         
     - name: Build and push Docker image
       id: image-tag
@@ -170,10 +209,42 @@ jobs:
           --instance-ids ${{ steps.target-ec2.outputs.instance-id }} \
           --query 'Reservations[0].Instances[0].PublicIpAddress' \
           --output text)
-        curl -sS -X POST http://$EC2_IP/staging/soundbite \
+        
+        echo "🧪 Running canary test for staging environment..."
+        
+        # Test API endpoint
+        RESPONSE=$(curl -sS -X POST http://$EC2_IP/staging/soundbite \
           -H "Content-Type: application/json" \
           -H "Idempotency-Key: 00000000-0000-0000-0000-000000000001" \
-          -d '{"text":"staging canary","voiceId":"Joanna"}' | head -200 || true
+          -d '{"text":"staging canary","voiceId":"Joanna"}' || true)
+        
+        echo "API Response: $RESPONSE"
+        
+        # Extract soundbite ID from response
+        SOUNDBITE_ID=$(echo "$RESPONSE" | jq -r '.id // empty' 2>/dev/null || true)
+        
+        if [ -n "$SOUNDBITE_ID" ]; then
+          echo "✅ Canary test created soundbite: $SOUNDBITE_ID"
+          
+          # Wait a bit for Lambda processing
+          echo "⏳ Waiting for Lambda processing..."
+          sleep 10
+          
+          # Check if soundbite was processed
+          STATUS_RESPONSE=$(curl -sS http://$EC2_IP/staging/soundbite/$SOUNDBITE_ID || true)
+          STATUS=$(echo "$STATUS_RESPONSE" | jq -r '.status // empty' 2>/dev/null || true)
+          
+          echo "Soundbite status: $STATUS"
+          
+          if [ "$STATUS" = "ready" ]; then
+            echo "✅ Lambda processing successful - soundbite is ready!"
+          else
+            echo "⚠️ Lambda processing may still be in progress (status: $STATUS)"
+          fi
+        else
+          echo "❌ Canary test failed - no soundbite ID returned"
+          exit 1
+        fi
         
     - name: Notify deployment status
       if: always()

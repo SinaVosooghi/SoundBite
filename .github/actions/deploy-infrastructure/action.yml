@@ -1,0 +1,159 @@
+name: 'Deploy Infrastructure'
+description: 'Deploy CDK infrastructure stacks for the specified environment'
+
+inputs:
+  environment:
+    description: 'Environment to deploy (staging|production)'
+    required: true
+  aws-region:
+    description: 'AWS region'
+    required: false
+    default: 'us-east-1'
+  deployment-strategy:
+    description: 'Deployment strategy (individual|shared)'
+    required: false
+    default: 'individual'
+  require-approval:
+    description: 'Require CDK approval for deployment'
+    required: false
+    default: 'never'
+
+outputs:
+  deployment-status:
+    description: 'Deployment status (success|failed)'
+    value: ${{ steps.deploy.outputs.status }}
+  stack-outputs:
+    description: 'Key deployment outputs (JSON)'
+    value: ${{ steps.outputs.outputs.stack-outputs }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Setup Node.js for CDK
+      uses: actions/setup-node@v4
+      with:
+        node-version: '22'
+        cache: 'yarn'
+        
+    - name: Enable Corepack
+      shell: bash
+      run: |
+        set -euo pipefail
+        corepack enable
+        
+    - name: Setup Yarn
+      shell: bash
+      run: |
+        set -euo pipefail
+        corepack prepare yarn@4.9.4 --activate
+        
+    - name: Install CDK dependencies
+      shell: bash
+      run: |
+        set -euo pipefail
+        cd cdk
+        yarn install --immutable
+        
+    - name: Build Lambda processor
+      shell: bash
+      run: |
+        set -euo pipefail
+        cd lambda/processor
+        yarn install --immutable
+        yarn build
+        
+    - name: Deploy infrastructure stacks
+      id: deploy
+      shell: bash
+      run: |
+        set -euo pipefail
+        ENVIRONMENT="${{ inputs.environment }}"
+        STRATEGY="${{ inputs.deployment-strategy }}"
+        APPROVAL="${{ inputs.require-approval }}"
+        
+        echo "🚀 Deploying infrastructure for $ENVIRONMENT using $STRATEGY strategy..."
+        
+        cd cdk
+        
+        if [ "$STRATEGY" = "shared" ]; then
+          echo "📦 Deploying shared multi-environment stacks..."
+          npx cdk deploy SoundBite-Shared-* --require-approval "$APPROVAL" --outputs-file ../deployment-outputs.json
+        else
+          echo "📦 Deploying individual environment stacks..."
+          npx cdk deploy SoundBite-$ENVIRONMENT-* --require-approval "$APPROVAL" --outputs-file ../deployment-outputs.json
+        fi
+        
+        echo "✅ Infrastructure deployment completed successfully!"
+        echo "status=success" >> $GITHUB_OUTPUT
+        
+    - name: Extract deployment outputs
+      id: outputs
+      shell: bash
+      run: |
+        set -euo pipefail
+        if [ -f "../deployment-outputs.json" ]; then
+          echo "📋 Extracting deployment outputs..."
+          cat ../deployment-outputs.json | jq -c . > /tmp/outputs.json
+          echo "stack-outputs=$(cat /tmp/outputs.json)" >> $GITHUB_OUTPUT
+        else
+          echo "stack-outputs={}" >> $GITHUB_OUTPUT
+        fi
+        
+    - name: Verify infrastructure deployment
+      shell: bash
+      run: |
+        set -euo pipefail
+        ENVIRONMENT="${{ inputs.environment }}"
+        
+        echo "🔍 Verifying infrastructure deployment..."
+        
+        # Check if stacks exist
+        STACKS=$(aws cloudformation list-stacks \
+          --stack-status-filter CREATE_COMPLETE UPDATE_COMPLETE \
+          --query "StackSummaries[?starts_with(StackName, 'SoundBite-$ENVIRONMENT-')].StackName" \
+          --output text)
+        
+        if [ -z "$STACKS" ]; then
+          echo "❌ No stacks found for environment $ENVIRONMENT"
+          exit 1
+        fi
+        
+        echo "✅ Found stacks: $STACKS"
+        
+        # Verify key resources exist
+        echo "🔍 Verifying key resources..."
+        
+        # Check Lambda function
+        if aws lambda get-function --function-name "SoundBite-$ENVIRONMENT-processor" >/dev/null 2>&1; then
+          echo "✅ Lambda function exists"
+        else
+          echo "❌ Lambda function not found"
+          exit 1
+        fi
+        
+        # Check SQS queue
+        if aws sqs get-queue-url --queue-name "SoundBite-$ENVIRONMENT-SoundbiteQueue" >/dev/null 2>&1; then
+          echo "✅ SQS queue exists"
+        else
+          echo "❌ SQS queue not found"
+          exit 1
+        fi
+        
+        # Check DynamoDB table
+        if aws dynamodb describe-table --table-name "SoundBite-$ENVIRONMENT-SoundbitesTable" >/dev/null 2>&1; then
+          echo "✅ DynamoDB table exists"
+        else
+          echo "❌ DynamoDB table not found"
+          exit 1
+        fi
+        
+        # Check S3 bucket
+        BUCKET_NAME="soundbite-$ENVIRONMENT-soundbites"
+        if aws s3 ls "s3://$BUCKET_NAME" >/dev/null 2>&1; then
+          echo "✅ S3 bucket exists"
+        else
+          echo "❌ S3 bucket not found"
+          exit 1
+        fi
+        
+        echo "✅ All infrastructure resources verified successfully!"
