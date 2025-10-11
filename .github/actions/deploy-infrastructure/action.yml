@@ -83,7 +83,13 @@ runs:
           npx cdk deploy SoundBite-Shared-* --require-approval "$APPROVAL" --outputs-file ../deployment-outputs.json
         else
           echo "📦 Deploying individual environment stacks..."
-          npx cdk deploy SoundBite-$ENVIRONMENT-* --require-approval "$APPROVAL" --outputs-file ../deployment-outputs.json
+          # Skip API stack for staging/production - we use existing EC2 instances
+          if [ "$ENVIRONMENT" = "staging" ] || [ "$ENVIRONMENT" = "production" ]; then
+            echo "⚠️  Skipping API stack for $ENVIRONMENT - using existing EC2 instance"
+            npx cdk deploy SoundBite-$ENVIRONMENT-Database SoundBite-$ENVIRONMENT-Storage SoundBite-$ENVIRONMENT-Queue SoundBite-$ENVIRONMENT-Compute --require-approval "$APPROVAL" --outputs-file ../deployment-outputs.json
+          else
+            npx cdk deploy SoundBite-$ENVIRONMENT-* --require-approval "$APPROVAL" --outputs-file ../deployment-outputs.json
+          fi
         fi
         
         echo "✅ Infrastructure deployment completed successfully!"
