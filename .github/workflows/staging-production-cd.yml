@@ -215,7 +215,7 @@ jobs:
         # Test API endpoint
         RESPONSE=$(curl -sS -X POST http://$EC2_IP/staging/soundbite \
           -H "Content-Type: application/json" \
-          -H "Idempotency-Key: 00000000-0000-0000-0000-000000000001" \
+          -H "Idempotency-Key: 550e8400-e29b-41d4-a716-446655440000" \
           -d '{"text":"staging canary","voiceId":"Joanna"}' || true)
         
         echo "API Response: $RESPONSE"
