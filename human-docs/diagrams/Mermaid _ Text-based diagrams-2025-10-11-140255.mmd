@@ -1,0 +1,10 @@
+flowchart TD
+  User["User inputs words"] --> Frontend["Frontend Form"]
+  Frontend -->|Submit| API["SoundBite API"]
+  API --> GPT5["Call GPT-5-mini with prompt"]
+  GPT5 --> StoryText["Receive generated story text"]
+  StoryText --> Polly["AWS Polly TTS (Neural/Expressive)"]
+  Polly --> S3["Store MP3 Audio"]
+  S3 --> API
+  API --> Frontend
+  Frontend -->|Play / Share| User

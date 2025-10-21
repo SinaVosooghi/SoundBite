@@ -1,0 +1,18 @@
+flowchart TD
+    A[Client] -->|POST /soundbite<br/>Idempotency-Key| B[NestJS API]
+    B --> C[(DynamoDB<br/>Soundbite Metadata)]
+    B --> D[(S3<br/>Audio Storage)]
+    B --> E[(SQS<br/>TTS Queue)]
+    E --> F[AWS TTS Service]
+    F --> D
+    B -->|GET /soundbite/:id| A
+    A -->|GET /health| B
+
+    subgraph Environments
+        L1[LocalStack: :3000]
+        L2[Dev AWS: :3001]
+        L3[Staging: EC2]
+        L1 -->|setup/dev| B
+        L2 -->|dev aws| B
+        L3 -->|deploy staging| B
+    end

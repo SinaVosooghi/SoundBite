@@ -1,0 +1,33 @@
+flowchart LR
+  Repo["GitHub Repo"] -->|push / PR to branches: dev, staging, master| CI["CI Pipeline<br/>(mode-aware)"]
+
+  subgraph CI_Template["CI Pipeline (single template)"]
+    direction TB
+    Validate["Validate<br/>(checkout, load project config)"]
+    Test["Test<br/>(unit + e2e)<br/>(mode-aware: LocalStack on dev, real AWS on staging/master)"]
+    Build["Build & Package<br/>(dist artifacts, docker image)"]
+    Publish["Publish<br/>(dev → artifacts; staging/master → ECR image)"]
+  end
+
+  CI --> Validate
+  Validate --> Test
+  Test --> Build
+  Build --> Publish
+  Publish -->|staging/master or manual promotion| CD["CD Pipeline<br/>(env param: staging \\/ production)"]
+
+  subgraph CD_Template["CD Pipeline (single template)"]
+    direction TB
+    Infra["Deploy Infra<br/>(CloudFormation / CDK)"]
+    Image["Build & Push Image<br/>(ECR)"]
+    Deploy["Deploy App<br/>(SSM + docker-compose on EC2)"]
+    Verify["Verify<br/>(health checks; canary when env==staging)"]
+    Notify["Notify / Rollback"]
+  end
+
+  CD --> Infra
+  Infra --> Image
+  Image --> Deploy
+  Deploy --> Verify
+  Verify --> Notify
+
+  Notify --> Envs["Environments<br/>(AWS / EC2)"]
