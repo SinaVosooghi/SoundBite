@@ -182,7 +182,7 @@ runs:
         
         # Check S3 bucket
         # S3 bucket names include account ID suffix, so we need to find the actual bucket name
-        BUCKET_PREFIX="soundbite-$PREFIX-soundbites"
+        BUCKET_PREFIX="soundbite-$ENVIRONMENT-soundbites"
         BUCKET_NAME=$(aws s3 ls --region us-east-1 | grep "$BUCKET_PREFIX" | awk '{print $3}' | head -1)
         
         if [ -n "$BUCKET_NAME" ] && aws s3 ls "s3://$BUCKET_NAME" >/dev/null 2>&1; then
