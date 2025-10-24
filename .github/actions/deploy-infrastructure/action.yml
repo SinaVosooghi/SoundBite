@@ -134,8 +134,11 @@ runs:
         echo "🔍 Verifying infrastructure deployment..."
         
         # Get the environment prefix from CDK (same logic as deployment)
+        cd cdk
+        export CDK_ENVIRONMENT="$ENVIRONMENT"
         PREFIX=$(npx cdk list | grep -E "SoundBite-.*-Database" | head -1 | sed 's/SoundBite-\(.*\)-Database/\1/')
         echo "🔍 Using prefix for verification: $PREFIX"
+        cd ..
         
         # Check if stacks exist
         STACKS=$(aws cloudformation list-stacks \
