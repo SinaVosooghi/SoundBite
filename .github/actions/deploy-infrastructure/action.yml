@@ -100,12 +100,11 @@ runs:
           PREFIX=$(npx cdk list | grep -E "SoundBite-.*-Database" | head -1 | sed 's/SoundBite-\(.*\)-Database/\1/')
           echo "🔍 Detected environment prefix: $PREFIX"
           
-          # For production, always deploy API stack to ensure EC2 instance exists
-          if [ "$ENVIRONMENT" = "staging" ]; then
-            echo "⚠️  Skipping API stack for staging - using existing EC2 instance"
+          # Skip API stack for both staging and production - we use shared EC2 instance
+          if [ "$ENVIRONMENT" = "staging" ] || [ "$ENVIRONMENT" = "production" ]; then
+            echo "⚠️  Skipping API stack for $ENVIRONMENT - using shared EC2 instance"
             npx cdk deploy SoundBite-$PREFIX-Database SoundBite-$PREFIX-Storage SoundBite-$PREFIX-Queue SoundBite-$PREFIX-Compute --require-approval "$APPROVAL" --outputs-file ../deployment-outputs.json
           else
-            echo "📦 Deploying all stacks including API for $ENVIRONMENT"
             npx cdk deploy SoundBite-$PREFIX-* --require-approval "$APPROVAL" --outputs-file ../deployment-outputs.json
           fi
         fi
