@@ -71,8 +71,18 @@ jobs:
       run: |
         set -euo pipefail
         ENV="${{ steps.env-info.outputs.environment }}"
-        STACK_NAME="SoundBite-$ENV-API"
-        echo "Resolving EC2 instance for stack: $STACK_NAME"
+        
+        # Determine the correct prefix based on environment
+        if [ "$ENV" = "production" ]; then
+          PREFIX="prod"
+        elif [ "$ENV" = "staging" ]; then
+          PREFIX="staging"
+        else
+          PREFIX="$ENV"
+        fi
+        
+        STACK_NAME="SoundBite-$PREFIX-API"
+        echo "Resolving EC2 instance for stack: $STACK_NAME (environment: $ENV, prefix: $PREFIX)"
         
         # Try to get instance ID from infrastructure deployment outputs first
         if [ -f "deployment-outputs.json" ]; then
