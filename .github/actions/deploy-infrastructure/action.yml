@@ -17,6 +17,10 @@ inputs:
     description: 'Require CDK approval for deployment'
     required: false
     default: 'never'
+  default-ec2-instance-id:
+    description: 'Default EC2 instance ID for shared deployments'
+    required: false
+    default: 'i-0e42eb553386cc529'
 
 outputs:
   deployment-status:
@@ -100,10 +104,23 @@ runs:
           PREFIX=$(npx cdk list | grep -E "SoundBite-.*-Database" | head -1 | sed 's/SoundBite-\(.*\)-Database/\1/')
           echo "🔍 Detected environment prefix: $PREFIX"
           
-          # Skip API stack for both staging and production - we use shared EC2 instance
+          # For staging and production, check if EC2 instance exists, create if needed
           if [ "$ENVIRONMENT" = "staging" ] || [ "$ENVIRONMENT" = "production" ]; then
-            echo "⚠️  Skipping API stack for $ENVIRONMENT - using shared EC2 instance"
-            npx cdk deploy SoundBite-$PREFIX-Database SoundBite-$PREFIX-Storage SoundBite-$PREFIX-Queue SoundBite-$PREFIX-Compute --require-approval "$APPROVAL" --outputs-file ../deployment-outputs.json
+            echo "🔍 Checking for existing shared EC2 instance..."
+            
+            # Check if the default EC2 instance exists and is running
+            INSTANCE_ID="${{ inputs.default-ec2-instance-id }}"
+            INSTANCE_STATE=$(aws ec2 describe-instances --instance-ids "$INSTANCE_ID" --query 'Reservations[0].Instances[0].State.Name' --output text 2>/dev/null || echo "not-found")
+            
+            if [ "$INSTANCE_STATE" = "running" ]; then
+              echo "✅ Found existing EC2 instance: $INSTANCE_ID (state: $INSTANCE_STATE)"
+              echo "⚠️  Skipping API stack for $ENVIRONMENT - using existing EC2 instance"
+              npx cdk deploy SoundBite-$PREFIX-Database SoundBite-$PREFIX-Storage SoundBite-$PREFIX-Queue SoundBite-$PREFIX-Compute --require-approval "$APPROVAL" --outputs-file ../deployment-outputs.json
+            else
+              echo "❌ EC2 instance $INSTANCE_ID not found or not running (state: $INSTANCE_STATE)"
+              echo "🏗️  Creating new shared EC2 instance for staging and production..."
+              npx cdk deploy SoundBite-$PREFIX-* --require-approval "$APPROVAL" --outputs-file ../deployment-outputs.json
+            fi
           else
             npx cdk deploy SoundBite-$PREFIX-* --require-approval "$APPROVAL" --outputs-file ../deployment-outputs.json
           fi

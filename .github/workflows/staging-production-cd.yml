@@ -65,6 +65,7 @@ jobs:
         aws-region: ${{ steps.cfg.outputs.aws-region }}
         deployment-strategy: 'individual'
         require-approval: 'never'
+        default-ec2-instance-id: ${{ steps.cfg.outputs.default-ec2-instance-id }}
         
     - name: Resolve target EC2 instance by environment
       id: target-ec2
