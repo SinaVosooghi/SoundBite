@@ -156,7 +156,7 @@ runs:
         # Verify key resources exist
         echo "🔍 Verifying key resources..."
         
-        # Check Lambda function
+        # Check Lambda function (uses environment name)
         if aws lambda get-function --function-name "SoundBite-$ENVIRONMENT-processor" >/dev/null 2>&1; then
           echo "✅ Lambda function exists"
         else
@@ -164,15 +164,15 @@ runs:
           exit 1
         fi
         
-        # Check SQS queue
-        if aws sqs get-queue-url --queue-name "SoundBite-$PREFIX-SoundbiteQueue" >/dev/null 2>&1; then
+        # Check SQS queue (uses environment name)
+        if aws sqs get-queue-url --queue-name "SoundBite-$ENVIRONMENT-SoundbiteQueue" >/dev/null 2>&1; then
           echo "✅ SQS queue exists"
         else
           echo "❌ SQS queue not found"
           exit 1
         fi
         
-        # Check DynamoDB table
+        # Check DynamoDB table (uses prefix)
         if aws dynamodb describe-table --table-name "SoundBite-$PREFIX-SoundbitesTable" >/dev/null 2>&1; then
           echo "✅ DynamoDB table exists"
         else
