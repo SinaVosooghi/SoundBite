@@ -133,10 +133,14 @@ runs:
         
         echo "🔍 Verifying infrastructure deployment..."
         
+        # Get the environment prefix from CDK (same logic as deployment)
+        PREFIX=$(npx cdk list | grep -E "SoundBite-.*-Database" | head -1 | sed 's/SoundBite-\(.*\)-Database/\1/')
+        echo "🔍 Using prefix for verification: $PREFIX"
+        
         # Check if stacks exist
         STACKS=$(aws cloudformation list-stacks \
           --stack-status-filter CREATE_COMPLETE UPDATE_COMPLETE \
-          --query "StackSummaries[?starts_with(StackName, 'SoundBite-$ENVIRONMENT-')].StackName" \
+          --query "StackSummaries[?starts_with(StackName, 'SoundBite-$PREFIX-')].StackName" \
           --output text)
         
         if [ -z "$STACKS" ]; then
@@ -158,7 +162,7 @@ runs:
         fi
         
         # Check SQS queue
-        if aws sqs get-queue-url --queue-name "SoundBite-$ENVIRONMENT-SoundbiteQueue" >/dev/null 2>&1; then
+        if aws sqs get-queue-url --queue-name "SoundBite-$PREFIX-SoundbiteQueue" >/dev/null 2>&1; then
           echo "✅ SQS queue exists"
         else
           echo "❌ SQS queue not found"
@@ -166,7 +170,7 @@ runs:
         fi
         
         # Check DynamoDB table
-        if aws dynamodb describe-table --table-name "SoundBite-$ENVIRONMENT-SoundbitesTable" >/dev/null 2>&1; then
+        if aws dynamodb describe-table --table-name "SoundBite-$PREFIX-SoundbitesTable" >/dev/null 2>&1; then
           echo "✅ DynamoDB table exists"
         else
           echo "❌ DynamoDB table not found"
@@ -175,7 +179,7 @@ runs:
         
         # Check S3 bucket
         # S3 bucket names include account ID suffix, so we need to find the actual bucket name
-        BUCKET_PREFIX="soundbite-$ENVIRONMENT-soundbites"
+        BUCKET_PREFIX="soundbite-$PREFIX-soundbites"
         BUCKET_NAME=$(aws s3 ls --region us-east-1 | grep "$BUCKET_PREFIX" | awk '{print $3}' | head -1)
         
         if [ -n "$BUCKET_NAME" ] && aws s3 ls "s3://$BUCKET_NAME" >/dev/null 2>&1; then
