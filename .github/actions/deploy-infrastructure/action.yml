@@ -172,8 +172,8 @@ runs:
           exit 1
         fi
         
-        # Check DynamoDB table (uses prefix)
-        if aws dynamodb describe-table --table-name "SoundBite-$PREFIX-SoundbitesTable" >/dev/null 2>&1; then
+        # Check DynamoDB table (uses environment name)
+        if aws dynamodb describe-table --table-name "SoundBite-$ENVIRONMENT-SoundbitesTable" >/dev/null 2>&1; then
           echo "✅ DynamoDB table exists"
         else
           echo "❌ DynamoDB table not found"
