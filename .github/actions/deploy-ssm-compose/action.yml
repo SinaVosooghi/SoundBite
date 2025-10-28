@@ -42,6 +42,7 @@ runs:
             \"echo \\\"📦 Cloning/updating repository...\\\"\",
             \"cd /home/ec2-user\",
             \"if [ -d SoundBite ]; then cd SoundBite && git pull; else git clone https://github.com/SinaVosooghi/SoundBite.git; fi\",
+            \"cd SoundBite/docker || cd SoundBite\",
             \"aws ecr get-login-password --region ${{ inputs.aws-region }} | docker login --username AWS --password-stdin ${{ inputs.ecr-registry }}\",
             \"echo \\\"✍️  Writing .env for compose with resolved tags...\\\"\",
             \"echo ECR_REGISTRY=${{ inputs.ecr-registry }} > .env\",
