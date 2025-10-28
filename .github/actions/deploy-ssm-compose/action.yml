@@ -36,6 +36,9 @@ runs:
           --document-name "AWS-RunShellScript" \
           --parameters "commands=[
             \"echo \\\"🚀 Starting Docker Compose deployment for $ENVIRONMENT...\\\"\",
+            \"echo \\\"🔧 Ensuring docker-compose is installed...\\\"\",
+            \"which docker-compose || (curl -L 'https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)' -o /usr/local/bin/docker-compose && chmod +x /usr/local/bin/docker-compose)\",
+            \"docker-compose --version\",
             \"cd /home/ec2-user\",
             \"aws ecr get-login-password --region ${{ inputs.aws-region }} | docker login --username AWS --password-stdin ${{ inputs.ecr-registry }}\",
             \"echo \\\"✍️  Writing .env for compose with resolved tags...\\\"\",
