@@ -101,13 +101,15 @@ jobs:
             --output text 2>/dev/null || true)
         fi
         
-        # Final fallback to default
+        # Verify we have a valid instance ID
         if [ -z "$INSTANCE_ID" ] || [ "$INSTANCE_ID" = "None" ] || [ "$INSTANCE_ID" = "N/A" ]; then
-          INSTANCE_ID="${{ steps.env-info.outputs.ec2-instance-id }}"
-          echo "Falling back to default instance id: $INSTANCE_ID"
+          echo "❌ No EC2 instance found for stack $STACK_NAME"
+          echo "This is expected if this is the first deployment."
+          INSTANCE_ID=""
         fi
         
         echo "instance-id=$INSTANCE_ID" >> $GITHUB_OUTPUT
+        echo "✅ Resolved EC2 instance: ${INSTANCE_ID:-'(will be created)'}"
         
     - name: Verify infrastructure deployment
       run: |
@@ -131,7 +133,7 @@ jobs:
         dockerfile: ${{ steps.cfg.outputs.dockerfile-prod }}
         image-name: soundbite-${{ steps.env-info.outputs.tag }}
         ecr-registry: ${{ vars.ECR_REGISTRY || steps.cfg.outputs.ecr-registry }}
-        ecr-repository: ${{ vars.ECR_REPOSITORY || steps.cfg.outputs.ecr-repository }}
+        ecr-repository: soundbite-${{ steps.env-info.outputs.environment }}-api
         tag: ${{ steps.env-info.outputs.tag }}
         aws-region: ${{ steps.cfg.outputs.aws-region }}
         
@@ -147,7 +149,7 @@ jobs:
         instance-id: ${{ steps.target-ec2.outputs.instance-id }}
         environment: ${{ steps.env-info.outputs.environment }}
         ecr-registry: ${{ vars.ECR_REGISTRY || steps.cfg.outputs.ecr-registry }}
-        ecr-repository: ${{ vars.ECR_REPOSITORY || steps.cfg.outputs.ecr-repository }}
+        ecr-repository: soundbite-${{ steps.env-info.outputs.environment }}-api
         image-tag: ${{ steps.env-info.outputs.tag }}
         aws-region: ${{ steps.cfg.outputs.aws-region }}
         

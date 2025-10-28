@@ -51,9 +51,9 @@ inputs:
     required: false
     default: 'arn:aws:iam::762233763891:role/GitHubActions-SoundBite-Prod'
   default-ec2-instance-id:
-    description: 'Default EC2 instance id for deployments'
+    description: 'Default EC2 instance id for deployments (dynamically resolved)'
     required: false
-    default: 'i-0e42eb553386cc529'
+    default: ''
   dockerfile-dev:
     description: 'Path to development Dockerfile'
     required: false

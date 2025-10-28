@@ -106,19 +106,31 @@ runs:
           
           # For staging and production, check if EC2 instance exists, create if needed
           if [ "$ENVIRONMENT" = "staging" ] || [ "$ENVIRONMENT" = "production" ]; then
-            echo "🔍 Checking for existing shared EC2 instance..."
+            echo "🔍 Checking for existing shared EC2 instance from CloudFormation..."
             
-            # Check if the default EC2 instance exists and is running
-            INSTANCE_ID="${{ inputs.default-ec2-instance-id }}"
-            INSTANCE_STATE=$(aws ec2 describe-instances --instance-ids "$INSTANCE_ID" --query 'Reservations[0].Instances[0].State.Name' --output text 2>/dev/null || echo "not-found")
+            # Dynamically check if API stack exists and has an instance
+            STACK_NAME="SoundBite-$PREFIX-API"
+            INSTANCE_ID=$(aws cloudformation describe-stacks \
+              --stack-name "$STACK_NAME" \
+              --query "Stacks[0].Outputs[?OutputKey=='ApiInstanceId'].OutputValue" \
+              --output text 2>/dev/null || echo "")
             
-            if [ "$INSTANCE_STATE" = "running" ]; then
-              echo "✅ Found existing EC2 instance: $INSTANCE_ID (state: $INSTANCE_STATE)"
-              echo "⚠️  Skipping API stack for $ENVIRONMENT - using existing EC2 instance"
-              npx cdk deploy SoundBite-$PREFIX-Database SoundBite-$PREFIX-Storage SoundBite-$PREFIX-Queue SoundBite-$PREFIX-Compute --require-approval "$APPROVAL" --outputs-file ../deployment-outputs.json
+            if [ -n "$INSTANCE_ID" ] && [ "$INSTANCE_ID" != "None" ]; then
+              # Check if the instance is still running
+              INSTANCE_STATE=$(aws ec2 describe-instances --instance-ids "$INSTANCE_ID" --query 'Reservations[0].Instances[0].State.Name' --output text 2>/dev/null || echo "not-found")
+              
+              if [ "$INSTANCE_STATE" = "running" ]; then
+                echo "✅ Found existing EC2 instance: $INSTANCE_ID (state: $INSTANCE_STATE)"
+                echo "⚠️  Skipping API stack for $ENVIRONMENT - using existing EC2 instance"
+                npx cdk deploy SoundBite-$PREFIX-Database SoundBite-$PREFIX-Storage SoundBite-$PREFIX-Queue SoundBite-$PREFIX-Compute --require-approval "$APPROVAL" --outputs-file ../deployment-outputs.json
+              else
+                echo "❌ EC2 instance $INSTANCE_ID not running (state: $INSTANCE_STATE)"
+                echo "🏗️  Deploying all stacks including API to create/update EC2 instance..."
+                npx cdk deploy SoundBite-$PREFIX-* --require-approval "$APPROVAL" --outputs-file ../deployment-outputs.json
+              fi
             else
-              echo "❌ EC2 instance $INSTANCE_ID not found or not running (state: $INSTANCE_STATE)"
-              echo "🏗️  Creating new shared EC2 instance for staging and production..."
+              echo "❌ No existing EC2 instance found (stack $STACK_NAME not found or has no instance)"
+              echo "🏗️  Deploying all stacks including API to create EC2 instance..."
               npx cdk deploy SoundBite-$PREFIX-* --require-approval "$APPROVAL" --outputs-file ../deployment-outputs.json
             fi
           else
