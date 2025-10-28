@@ -132,6 +132,32 @@ runs:
               echo "❌ No existing EC2 instance found (stack $STACK_NAME not found or has no instance)"
               echo "🏗️  Deploying all stacks including API to create EC2 instance..."
               npx cdk deploy SoundBite-$PREFIX-* --require-approval "$APPROVAL" --outputs-file ../deployment-outputs.json
+              
+              # Wait for cloud-init to complete after creating a new instance
+              echo "⏳ Waiting for cloud-init to complete on new instance..."
+              INSTANCE_ID=$(aws cloudformation describe-stacks \
+                --stack-name "$STACK_NAME" \
+                --query "Stacks[0].Outputs[?OutputKey=='ApiInstanceId'].OutputValue" \
+                --output text 2>/dev/null || echo "")
+              
+              if [ -n "$INSTANCE_ID" ] && [ "$INSTANCE_ID" != "None" ]; then
+                echo "🔍 Waiting for instance $INSTANCE_ID to be ready..."
+                aws ec2 wait instance-status-ok --instance-ids "$INSTANCE_ID" --region "${{ inputs.aws-region }}"
+                echo "✅ Instance is running and healthy"
+                
+                # Wait for cloud-init to finish
+                echo "⏳ Waiting for cloud-init to complete..."
+                aws ssm wait command-executed \
+                  --command-id "$(aws ssm send-command \
+                    --instance-ids "$INSTANCE_ID" \
+                    --document-name "AWS-RunShellScript" \
+                    --parameters 'commands=["cloud-init status --wait"]' \
+                    --region "${{ inputs.aws-region }}" \
+                    --query 'Command.CommandId' \
+                    --output text)" \
+                  --region "${{ inputs.aws-region }}"
+                echo "✅ Cloud-init completed successfully"
+              fi
             fi
           else
             npx cdk deploy SoundBite-$PREFIX-* --require-approval "$APPROVAL" --outputs-file ../deployment-outputs.json
