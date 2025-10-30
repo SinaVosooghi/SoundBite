@@ -67,7 +67,7 @@ services:
       - soundbite-network
     depends_on:
       - soundbite-staging
-      - soundbite-production
+      # production is optional; nginx can run with staging only
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost/health"]
