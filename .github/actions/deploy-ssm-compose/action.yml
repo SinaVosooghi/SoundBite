@@ -31,40 +31,45 @@ runs:
         set -euo pipefail
         ENVIRONMENT='${{ inputs.environment }}'
         IMAGE_TAG='${{ inputs.image-tag }}'
+
+        cmds=()
+        cmds+=("echo \"🚀 Starting Docker Compose deployment for $ENVIRONMENT...\"")
+        cmds+=("echo \"🔧 Ensuring docker-compose is installed...\"")
+        cmds+=("which docker-compose || (curl -L https://github.com/docker/compose/releases/latest/download/docker-compose-Linux-x86_64 -o /usr/local/bin/docker-compose && chmod +x /usr/local/bin/docker-compose)")
+        cmds+=("docker-compose --version")
+        cmds+=("echo \"📦 Cloning/updating repository...\"")
+        cmds+=("cd /home/ec2-user")
+        cmds+=("echo '📥 Ensuring git is installed...'")
+        cmds+=("which git || (sudo yum -y install git || sudo dnf -y install git)")
+        cmds+=("if [ -d SoundBite ]; then cd SoundBite; else git clone https://github.com/SinaVosooghi/SoundBite.git && cd SoundBite; fi")
+        cmds+=("if [[ \"$ENVIRONMENT\" == \"staging\" ]]; then git fetch --all && git checkout staging && git pull; else git fetch --all && git checkout master && git pull; fi")
+        cmds+=("cd /home/ec2-user/SoundBite/docker || cd /home/ec2-user/SoundBite")
+        cmds+=("aws ecr get-login-password --region ${{ inputs.aws-region }} | docker login --username AWS --password-stdin ${{ inputs.ecr-registry }}")
+        cmds+=("echo \"✍️  Writing .env for compose with resolved tags...\"")
+        cmds+=("echo ECR_REGISTRY=${{ inputs.ecr-registry }} > .env")
+        cmds+=("echo ECR_REPOSITORY=${{ inputs.ecr-repository }} >> .env")
+        cmds+=("if [[ \"$ENVIRONMENT\" == \"staging\" ]]; then echo STAGING_TAG=$IMAGE_TAG >> .env; else echo PRODUCTION_TAG=$IMAGE_TAG >> .env; fi")
+        cmds+=("echo \"📦 Pulling latest image for target service...\"")
+        cmds+=("if [[ \"$ENVIRONMENT\" == \"staging\" ]]; then docker-compose -f docker-compose.ec2.yml pull soundbite-staging; else docker-compose -f docker-compose.ec2.yml pull soundbite-production; fi")
+        cmds+=("echo \"🛑 Stopping existing services...\"")
+        cmds+=("if [[ \"$ENVIRONMENT\" == \"staging\" ]]; then docker-compose -f docker-compose.ec2.yml stop soundbite-staging || true; else docker-compose -f docker-compose.ec2.yml stop soundbite-production || true; fi")
+        cmds+=("echo \"🧹 Cleaning up Docker to free space...\"")
+        cmds+=("docker system prune -f || true")
+        cmds+=("echo \"🚀 Starting target service with Docker Compose...\"")
+        cmds+=("if [[ \"$ENVIRONMENT\" == \"staging\" ]]; then docker-compose -f docker-compose.ec2.yml up -d soundbite-staging nginx; else docker-compose -f docker-compose.ec2.yml up -d soundbite-production nginx; fi")
+        cmds+=("echo \"⏳ Waiting for health checks...\"")
+        cmds+=("sleep 30")
+        cmds+=("echo \"🔍 Checking service status...\"")
+        cmds+=("docker-compose -f docker-compose.ec2.yml ps | cat")
+        cmds+=("echo \"🎉 Docker Compose deployment completed!\"")
+
+        params_json=$(printf '%s
+' "${cmds[@]}" | jq -R . | jq -s '{commands: .}')
+
         COMMAND_ID=$(aws ssm send-command \
           --instance-ids "${{ inputs.instance-id }}" \
           --document-name "AWS-RunShellScript" \
-          --parameters "commands=[
-            \"echo \\\"🚀 Starting Docker Compose deployment for $ENVIRONMENT...\\\"\",
-            \"echo \\\"🔧 Ensuring docker-compose is installed...\\\"\",
-            \"which docker-compose || (curl -L 'https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)' -o /usr/local/bin/docker-compose && chmod +x /usr/local/bin/docker-compose)\",
-            \"docker-compose --version\",
-            \"echo \\\"📦 Cloning/updating repository...\\\"\",
-            \"cd /home/ec2-user\",
-            \"echo '📥 Ensuring git is installed...'\",
-            \"which git || (sudo yum -y install git || sudo dnf -y install git)\",
-            \"if [ -d SoundBite ]; then cd SoundBite; else git clone https://github.com/SinaVosooghi/SoundBite.git && cd SoundBite; fi\",
-            \"if [[ \"$ENVIRONMENT\" == \"staging\" ]]; then git fetch --all && git checkout staging && git pull; else git fetch --all && git checkout master && git pull; fi\",
-            \"cd SoundBite/docker || cd SoundBite\",
-            \"aws ecr get-login-password --region ${{ inputs.aws-region }} | docker login --username AWS --password-stdin ${{ inputs.ecr-registry }}\",
-            \"echo \\\"✍️  Writing .env for compose with resolved tags...\\\"\",
-            \"echo ECR_REGISTRY=${{ inputs.ecr-registry }} > .env\",
-            \"echo ECR_REPOSITORY=${{ inputs.ecr-repository }} >> .env\",
-            \"if [[ \\\"$ENVIRONMENT\\\" == \\\"staging\\\" ]]; then echo STAGING_TAG=$IMAGE_TAG >> .env; else echo PRODUCTION_TAG=$IMAGE_TAG >> .env; fi\",
-            \"echo \\\"📦 Pulling latest image for target service...\\\"\",
-            \"if [[ \\\"$ENVIRONMENT\\\" == \\\"staging\\\" ]]; then docker-compose -f docker-compose.ec2.yml pull soundbite-staging; else docker-compose -f docker-compose.ec2.yml pull soundbite-production; fi\",
-            \"echo \\\"🛑 Stopping existing services...\\\"\",
-            \"if [[ \\\"$ENVIRONMENT\\\" == \\\"staging\\\" ]]; then docker-compose -f docker-compose.ec2.yml stop soundbite-staging || true; else docker-compose -f docker-compose.ec2.yml stop soundbite-production || true; fi\",
-            \"echo \\\"🧹 Cleaning up Docker to free space...\\\"\",
-            \"docker system prune -f || true\",
-            \"echo \\\"🚀 Starting target service with Docker Compose...\\\"\",
-            \"if [[ \\\"$ENVIRONMENT\\\" == \\\"staging\\\" ]]; then docker-compose -f docker-compose.ec2.yml up -d soundbite-staging nginx; else docker-compose -f docker-compose.ec2.yml up -d soundbite-production nginx; fi\",
-            \"echo \\\"⏳ Waiting for health checks...\\\"\",
-            \"sleep 30\",
-            \"echo \\\"🔍 Checking service status...\\\"\",
-            \"docker-compose -f docker-compose.ec2.yml ps | cat\",
-            \"echo \\\"🎉 Docker Compose deployment completed!\\\"\"
-          ]" \
+          --parameters "$params_json" \
           --region "${{ inputs.aws-region }}" \
           --query 'Command.CommandId' \
           --output text)
