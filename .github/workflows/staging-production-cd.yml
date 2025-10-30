@@ -171,6 +171,7 @@ jobs:
             \"set -euo pipefail\",
             \"echo ==== ensuring repository is present ====\",
             \"cd /home/ec2-user\",
+            \"which git || (sudo yum -y install git || sudo dnf -y install git)\",
             \"if [ -d SoundBite ]; then cd SoundBite && git pull && cd ..; else git clone https://github.com/SinaVosooghi/SoundBite.git; fi\",
             \"echo ==== docker ps -a ====\",
             \"docker ps -a\",
