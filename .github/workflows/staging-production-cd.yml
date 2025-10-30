@@ -169,6 +169,9 @@ jobs:
           --document-name "AWS-RunShellScript" \
           --parameters "commands=[
             \"set -euo pipefail\",
+            \"echo ==== ensuring repository is present ====\",
+            \"cd /home/ec2-user\",
+            \"if [ -d SoundBite ]; then cd SoundBite && git pull && cd ..; else git clone https://github.com/SinaVosooghi/SoundBite.git; fi\",
             \"echo ==== docker ps -a ====\",
             \"docker ps -a\",
             \"echo ==== docker-compose ps ====\",
